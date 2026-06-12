@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>历史记录 - 拉屎提醒</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .back-link {
+            display: inline-block;
+            margin: 20px 0;
+            padding: 10px 20px;
+            background-color: #2196F3;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .back-link:hover {
+            background-color: #0b7dda;
+        }
+        .record-item {
+            background-color: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .record-info {
+            flex: 1;
+        }
+        .record-time {
+            font-weight: bold;
+        }
+        .record-notes {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .record-device {
+            font-size: 13px;
+            color: #888;
+            margin-top: 5px;
+            font-style: italic;
+        }
+        .delete-form {
+            margin-left: 20px;
+        }
+        .delete-button {
+            padding: 5px 10px;
+            background-color: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .delete-button:hover {
+            background-color: #d32f2f;
+        }
+        .empty-message {
+            text-align: center;
+            margin: 50px 0;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>历史记录</h1>
+        
+        <a href="/" class="back-link">返回首页</a>
+        
+        <% if (records.length > 0) { %>
+            <% records.forEach(record => { %>
+                <div class="record-item">
+                    <div class="record-info">
+                        <div class="record-time"><%= new Date(record.date).toLocaleString() %></div>
+                        <% if (record.notes) { %>
+                            <div class="record-notes">备注: <%= record.notes %></div>
+                        <% } %>
+                        <% if (record.device) { %>
+                            <div class="record-device">
+                                📱 <%= record.device.model || record.device.type %> · <%= record.device.os %> · <%= record.device.browser %>
+                            </div>
+                        <% } %>
+                    </div>
+                    <form action="/delete/<%= record.id %>" method="post" class="delete-form">
+                        <button type="submit" class="delete-button" onclick="return confirm('确定要删除这条记录吗？');">删除</button>
+                    </form>
+                </div>
+            <% }); %>
+        <% } else { %>
+            <div class="empty-message">
+                <p>暂无历史记录</p>
+            </div>
+        <% } %>
+    </div>
+</body>
+</html>
