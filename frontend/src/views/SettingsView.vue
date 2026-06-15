@@ -114,34 +114,36 @@ onMounted(() => {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .page-title {
-  font-size: 1.8rem;
-  color: #333;
-  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+  color: #1f2937;
+  margin-bottom: 1.25rem;
   text-align: center;
+  font-weight: 700;
 }
 
 .settings-card {
   background: white;
   border-radius: 20px;
-  padding: 2rem;
+  padding: 1.5rem 1.25rem 1.75rem;
   box-shadow: 0 4px 20px rgba(0,0,0,0.08);
 }
 
 .setting-item {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .setting-label {
   display: block;
-  font-size: 1.1rem;
-  color: #333;
-  margin-bottom: 1rem;
-  font-weight: 500;
+  font-size: 1rem;
+  color: #1f2937;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+  text-align: center;
 }
 
 .time-picker {
@@ -152,45 +154,55 @@ onMounted(() => {
 }
 
 .time-select {
-  font-size: 1.5rem;
-  padding: 0.8rem 1.2rem;
-  border: 2px solid #e0e0e0;
+  font-size: 1.1rem;
+  padding: 0.75rem 1rem;
+  border: 2px solid #e5e7eb;
   border-radius: 12px;
   background: white;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
+  font-weight: 600;
+  color: #374151;
+  min-width: 80px;
+  text-align: center;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .time-select:focus {
   outline: none;
   border-color: #667eea;
-  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.12);
 }
 
 .time-separator {
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 700;
   color: #667eea;
 }
 
 .setting-info {
-  background: #f0f4ff;
+  background: #eef2ff;
   border-radius: 12px;
-  padding: 1rem;
+  padding: 0.85rem 1rem;
   display: flex;
   align-items: center;
-  gap: 0.8rem;
-  margin-bottom: 1.5rem;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
 }
 
 .info-icon {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .setting-info p {
-  color: #667eea;
+  color: #4338ca;
   margin: 0;
   font-size: 0.95rem;
+  line-height: 1.4;
+  flex: 1;
 }
 
 .save-btn {
@@ -198,18 +210,19 @@ onMounted(() => {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
   border-radius: 12px;
-  padding: 1rem;
-  font-size: 1.1rem;
-  font-weight: 600;
+  padding: 0.95rem;
+  font-size: 1.05rem;
+  font-weight: 700;
   color: white;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  min-height: 50px;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.save-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+.save-btn:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .save-btn:disabled {
@@ -218,11 +231,11 @@ onMounted(() => {
 }
 
 .message {
-  margin-top: 1rem;
-  padding: 0.8rem;
-  border-radius: 8px;
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
   text-align: center;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   animation: slideIn 0.3s ease;
 }
 
@@ -232,37 +245,99 @@ onMounted(() => {
 }
 
 .message.success {
-  background: #d4edda;
-  color: #155724;
+  background: #d1fae5;
+  color: #065f46;
 }
 
 .message.error {
-  background: #f8d7da;
-  color: #721c24;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .tips-card {
   background: white;
   border-radius: 20px;
-  padding: 1.5rem;
-  margin-top: 1.5rem;
+  padding: 1.25rem 1.25rem 1.5rem;
+  margin-top: 1.25rem;
   box-shadow: 0 4px 20px rgba(0,0,0,0.08);
 }
 
 .tips-card h3 {
-  color: #333;
-  margin-bottom: 1rem;
-  font-size: 1.1rem;
+  color: #1f2937;
+  margin-bottom: 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 700;
 }
 
 .tips-card ul {
   margin: 0;
-  padding-left: 1.5rem;
-  color: #666;
-  line-height: 1.8;
+  padding-left: 1.25rem;
+  color: #4b5563;
+  line-height: 1.7;
+  font-size: 0.95rem;
 }
 
 .tips-card li {
-  margin-bottom: 0.3rem;
+  margin-bottom: 0.2rem;
+}
+
+/* 小屏（<=480px） */
+@media (max-width: 480px) {
+  .page-title {
+    font-size: 1.3rem;
+  }
+
+  .settings-card {
+    padding: 1.25rem 1rem 1.5rem;
+    border-radius: 18px;
+  }
+
+  .setting-label {
+    font-size: 0.95rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .time-select {
+    font-size: 1rem;
+    padding: 0.65rem 0.75rem;
+    min-width: 64px;
+  }
+
+  .time-separator {
+    font-size: 1.5rem;
+  }
+
+  .setting-info {
+    padding: 0.75rem 0.85rem;
+    gap: 0.5rem;
+  }
+
+  .info-icon {
+    font-size: 1.2rem;
+  }
+
+  .setting-info p {
+    font-size: 0.9rem;
+  }
+
+  .save-btn {
+    font-size: 1rem;
+    padding: 0.85rem;
+    min-height: 48px;
+  }
+
+  .tips-card {
+    padding: 1.1rem 1rem 1.25rem;
+    border-radius: 18px;
+  }
+
+  .tips-card h3 {
+    font-size: 1rem;
+  }
+
+  .tips-card ul {
+    font-size: 0.9rem;
+    padding-left: 1.1rem;
+  }
 }
 </style>

@@ -1,0 +1,25 @@
+#!/usr/bin/expect -f
+set timeout 120
+set USER "root"
+set HOST "39.97.255.11"
+set PASSWORD "shit123."
+
+puts "\n=== Kill old & start new ==="
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$HOST "pkill -f 'node /opt/poopreminder/index.js'; sleep 2; cd /opt/poopreminder && nohup node index.js > app.log 2>&1 & disown; sleep 3; ps aux | grep -v grep | grep 'node.*index.js'"
+expect "*assword:"
+send "$PASSWORD\r"
+expect eof
+
+puts "\n=== Test curl ==="
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$HOST "sleep 2; tail -10 /opt/poopreminder/app.log; echo '---'; curl -s -o /dev/null -w 'LOCAL:%{http_code}\n' http://localhost:3000/; curl -s -o /dev/null -w 'PUBLIC:%{http_code}\n' http://39.97.255.11/"
+expect "*assword:"
+send "$PASSWORD\r"
+expect eof
+
+puts "\n=== Check nginx ==="
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$HOST "ls /etc/nginx/sites-enabled/ 2>/dev/null; ls /etc/nginx/conf.d/ 2>/dev/null; grep -rn '3000\|proxy_pass' /etc/nginx/ 2>/dev/null | head -20"
+expect "*assword:"
+send "$PASSWORD\r"
+expect eof
+
+puts "\n=== DONE ==="

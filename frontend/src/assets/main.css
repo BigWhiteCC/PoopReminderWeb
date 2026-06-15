@@ -4,23 +4,43 @@
   box-sizing: border-box;
 }
 
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  background: linear-gradient(180deg, #f5f7fa 0%, #c3cfe2 100%);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: linear-gradient(180deg, #f5f7fa 0%, #e4ecf7 100%);
   min-height: 100vh;
   color: #333;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  line-height: 1.5;
 }
 
 #app {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 button {
   font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: 1rem;
 }
 
 a {
   text-decoration: none;
+  color: inherit;
 }
 
 ::selection {
@@ -28,19 +48,55 @@ a {
   color: white;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
+/* 字号层级 */
+.text-xs { font-size: 0.75rem; }
+.text-sm { font-size: 0.875rem; }
+.text-base { font-size: 1rem; }
+.text-lg { font-size: 1.125rem; }
+.text-xl { font-size: 1.25rem; }
+
+/* 移动端优先（<=768px） */
+@media (max-width: 768px) {
+  html {
+    font-size: 15px;
+  }
+
+  body {
+    background: linear-gradient(180deg, #f5f7fa 0%, #dbe4f0 100%);
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
+/* 小屏（<=480px） */
+@media (max-width: 480px) {
+  html {
+    font-size: 14px;
+  }
 }
 
-::-webkit-scrollbar-thumb {
-  background: #667eea;
-  border-radius: 4px;
+/* 全局 toast（剪贴板复制成功等轻提示） */
+.toast-success {
+  position: fixed;
+  left: 50%;
+  bottom: 2.25rem;
+  transform: translateX(-50%);
+  background: rgba(31, 41, 55, 0.92);
+  color: white;
+  padding: 0.65rem 1.1rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  z-index: 9999;
+  pointer-events: none;
+  animation: toastIn 0.22s ease;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #764ba2;
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
+
+/* 通用导出按钮容器：在页面级 `export-row` 下生效 */
+.export-row { display: flex; gap: 0.5rem; justify-content: flex-end; margin-bottom: 1rem; }
+.export-row .btn { min-height: 34px; padding: 0.4rem 0.75rem; }

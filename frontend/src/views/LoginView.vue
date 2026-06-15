@@ -20,12 +20,12 @@
         </div>
 
         <div class="form-group">
-          <label for="email">邮箱</label>
+          <label for="email">{{ isLogin ? '账号（邮箱或用户名）' : '邮箱' }}</label>
           <input
             id="email"
             v-model="form.email"
-            type="email"
-            placeholder="请输入邮箱"
+            :type="isLogin ? 'text' : 'email'"
+            :placeholder="isLogin ? '输入邮箱或用户名' : '请输入邮箱'"
             class="form-input"
           />
         </div>
@@ -57,6 +57,8 @@
           <span v-else>{{ isLogin ? '登录' : '注册' }}</span>
         </button>
 
+        <component :is="DevHint" v-if="isLogin" @fill="fillTestAccount" />
+
         <div v-if="error" class="error-message">{{ error }}</div>
       </form>
 
@@ -71,12 +73,23 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, defineAsyncComponent } from 'vue'
 import { api, ApiError } from '../services/api'
 
 const isLogin = ref(true)
 const isLoading = ref(false)
 const error = ref('')
+
+let DevHint = null
+let fillTestAccount = () => {}
+if (import.meta.env.DEV) {
+  DevHint = defineAsyncComponent(() => import('../components/DevLoginHint.vue'))
+  fillTestAccount = () => {
+    form.email = 'test'
+    form.password = 'test123'
+    error.value = ''
+  }
+}
 
 const form = reactive({
   username: '',
@@ -153,91 +166,104 @@ const handleSubmit = async () => {
 
 <style scoped>
 .auth-container {
+  width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 1rem;
+  padding: 1.5rem clamp(0.75rem, 3vw, 2rem);
+  box-sizing: border-box;
 }
 
 .auth-card {
   background: white;
   border-radius: 24px;
-  padding: 2.5rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem) clamp(1.25rem, 4vw, 2.25rem);
   width: 100%;
-  max-width: 400px;
+  max-width: min(420px, 100%);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
 }
 
 .auth-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: clamp(1rem, 3vw, 1.75rem);
 }
 
 .logo {
-  font-size: 4rem;
-  margin-bottom: 1rem;
+  font-size: clamp(2.5rem, 7vw, 3.5rem);
+  margin-bottom: 0.75rem;
+  line-height: 1;
 }
 
 .auth-header h1 {
   color: #333;
-  font-size: 1.8rem;
-  margin-bottom: 0.5rem;
+  font-size: clamp(1.25rem, 3.5vw, 1.75rem);
+  margin-bottom: 0.4rem;
 }
 
 .auth-header p {
   color: #666;
+  font-size: clamp(0.85rem, 2.2vw, 1rem);
 }
 
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: clamp(0.75rem, 2vw, 1.1rem);
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .form-group label {
   color: #555;
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: clamp(0.8rem, 2vw, 0.95rem);
 }
 
 .form-input {
-  padding: 0.9rem 1.2rem;
+  width: 100%;
+  padding: clamp(0.7rem, 2vw, 0.95rem) 1rem;
   border: 2px solid #e0e0e0;
   border-radius: 12px;
-  font-size: 1rem;
-  transition: all 0.3s ease;
+  font-size: clamp(0.9rem, 2.3vw, 1.05rem);
+  transition: all 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
 }
 
 .form-input:focus {
   outline: none;
   border-color: #667eea;
-  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.12);
 }
 
 .auth-btn {
+  width: 100%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
   border-radius: 12px;
-  padding: 1rem;
-  font-size: 1rem;
+  padding: clamp(0.75rem, 2vw, 1rem);
+  font-size: clamp(0.95rem, 2.3vw, 1.1rem);
   font-weight: 600;
   color: white;
   cursor: pointer;
-  transition: all 0.3s ease;
-  margin-top: 0.5rem;
+  transition: all 0.2s ease;
+  margin-top: 0.25rem;
+  min-height: 48px;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.auth-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+.auth-btn:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .auth-btn:disabled {
@@ -248,18 +274,20 @@ const handleSubmit = async () => {
 .error-message {
   color: #ef4444;
   text-align: center;
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
+  font-size: clamp(0.8rem, 2vw, 0.95rem);
+  margin-top: 0.25rem;
+  line-height: 1.4;
 }
 
 .auth-switch {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  margin-top: 1.5rem;
+  gap: 0.4rem;
+  margin-top: clamp(1rem, 2.5vw, 1.5rem);
   color: #666;
-  font-size: 0.9rem;
+  font-size: clamp(0.8rem, 2vw, 0.95rem);
+  flex-wrap: wrap;
 }
 
 .switch-btn {
@@ -268,10 +296,33 @@ const handleSubmit = async () => {
   color: #667eea;
   font-weight: 600;
   cursor: pointer;
-  text-decoration: underline;
+  padding: 0.25rem 0.4rem;
+  font-size: inherit;
 }
 
-.switch-btn:hover {
-  color: #764ba2;
+.switch-btn:active {
+  opacity: 0.7;
+}
+
+/* 竖向小屏：让卡片顶对齐，避免被系统顶部条遮挡 */
+@media (max-width: 480px) {
+  .auth-container {
+    padding: 1rem 0.75rem;
+    align-items: flex-start;
+    padding-top: 3vh;
+  }
+
+  .auth-card {
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+  }
+}
+
+/* 横屏短高度时，允许卡片缩小并可滚动 */
+@media (max-height: 560px) {
+  .auth-container {
+    align-items: flex-start;
+    padding: 1rem;
+  }
 }
 </style>

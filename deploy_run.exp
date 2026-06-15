@@ -1,0 +1,50 @@
+#!/usr/bin/expect -f
+set timeout 300
+set USER "root"
+set HOST "39.97.255.11"
+set PASSWORD "shit123."
+set LOCAL_FILE "/Users/xk/Documents/Code/Daily/PoopReminderWeb/poopreminder-deploy.tar.gz"
+set REMOTE_DIR "/opt/poopreminder"
+
+puts "\n=== Step 1: SCP upload ==="
+spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $LOCAL_FILE $USER@$HOST:/tmp/poopreminder-deploy.tar.gz
+expect "*assword:"
+send "$PASSWORD\r"
+expect eof
+puts "Upload done"
+
+puts "\n=== Step 2: Extract on server ==="
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$HOST "rm -rf $REMOTE_DIR/frontend $REMOTE_DIR/index.js $REMOTE_DIR/package.json; cd /tmp && tar xzf poopreminder-deploy.tar.gz -C $REMOTE_DIR && ls -la $REMOTE_DIR/index.js $REMOTE_DIR/package.json && ls $REMOTE_DIR/frontend/dist/ && echo EXTRACT_OK"
+expect "*assword:"
+send "$PASSWORD\r"
+expect {
+    "EXTRACT_OK" { puts "Extract OK"; exp_continue }
+    eof { puts "Extract step done" }
+}
+
+puts "\n=== Step 3: Install npm deps if needed ==="
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$HOST "cd $REMOTE_DIR && npm install --production 2>&1 | tail -10 && echo NPM_DONE"
+expect "*assword:"
+send "$PASSWORD\r"
+expect {
+    "NPM_DONE" { puts "NPM OK"; exp_continue }
+    eof { puts "NPM step done" }
+}
+
+puts "\n=== Step 4: Restart app ==="
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$HOST "pkill -f 'node $REMOTE_DIR/index.js' 2>/dev/null; sleep 2; cd $REMOTE_DIR && nohup node index.js > app.log 2>&1 & disown; sleep 3; ps aux | grep -v grep | grep 'node.*index.js' && echo START_OK || echo START_FAIL"
+expect "*assword:"
+send "$PASSWORD\r"
+expect {
+    "START_OK" { puts "App started"; exp_continue }
+    "START_FAIL" { puts "App start FAILED"; exp_continue }
+    eof { puts "Start step done" }
+}
+
+puts "\n=== Step 5: Verify HTTP ==="
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$HOST "sleep 2; tail -10 $REMOTE_DIR/app.log; echo '---'; curl -s -o /dev/null -w 'LOCAL:%{http_code}\n' http://localhost:3000/; curl -s -o /dev/null -w 'PUBLIC:%{http_code}\n' http://$HOST/"
+expect "*assword:"
+send "$PASSWORD\r"
+expect eof
+
+puts "\n=== ALL DONE ==="

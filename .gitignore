@@ -1,30 +1,13 @@
-# Dependencies
 node_modules/
-frontend/node_modules/
-
-# Build outputs
 dist/
-frontend/dist/
-
-# Environment files
+.DS_Store
+*.log
+*.db
+*.sqlite
+*.sqlite3
+poopreminder.db
+poopreminder-deploy.tar.gz
 .env
 .env.local
-.env.*.local
-
-# IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-npm-debug.log*
-
-# Temporary files
-tmp/
-temp/
