@@ -68,11 +68,13 @@ function initializeDatabase() {
             catch (e) { console.log(`列 ${col} 添加失败:`, e.message); }
         }
     };
+    // SQLite 不允许 ALTER TABLE ADD COLUMN 使用 CURRENT_TIMESTAMP 等非常量默认值，
+    // 因此 created_at / role 先不带 DEFAULT，后续插入时由代码提供。
     addColumnIfMissing('poop_type', 'INTEGER');
     addColumnIfMissing('duration', 'INTEGER DEFAULT 0');
     addColumnIfMissing('status', 'TEXT');
-    addColumnIfMissing('created_at', 'TEXT DEFAULT CURRENT_TIMESTAMP');
-    addColumnIfMissing('role', 'TEXT NOT NULL DEFAULT \'user\'', 'users');
+    addColumnIfMissing('created_at', 'TEXT');
+    addColumnIfMissing('role', 'TEXT DEFAULT \'user\'', 'users');
 }
 
 initializeDatabase();
@@ -1146,8 +1148,16 @@ app.delete('/api/admin/record/:id', authenticateToken, requireAdmin, (req, res) 
     } catch (err) { res.status(500).json({ error: '删除失败' }); }
 });
 
-app.listen(port, () => {
-    console.log(`💩 Poop Reminder API listening at http://localhost:${port}`);
-    console.log(`📱 Vue Frontend running at http://localhost:${port}`);
-    console.log(`🗄️  SQLite database: poopreminder.db`);
-});
+try {
+    app.listen(port, () => {
+        console.log(`💩 Poop Reminder API listening at http://localhost:${port}`);
+        console.log(`📱 Vue Frontend running at http://localhost:${port}`);
+        console.log(`🗄️  SQLite database: poopreminder.db`);
+    }).on('error', (err) => {
+        console.error('❌ Failed to start server:', err.message);
+        process.exit(1);
+    });
+} catch (err) {
+    console.error('❌ Failed to start server (sync):', err.message);
+    process.exit(1);
+}

@@ -158,25 +158,23 @@ ssh "$REMOTE_HOST" bash << 'REMOTE_SCRIPT'
     # 设置权限
     chmod +x start.sh
 
-    echo ""
-    echo "✅ 部署完成！"
-    echo "   部署目录: $DEPLOY_DIR"
-    echo ""
-    echo "启动应用:"
-    echo "  cd $DEPLOY_DIR && npm start"
-    echo ""
-    echo "使用 systemd 守护进程（推荐）:"
-    echo "  sudo cp $DEPLOY_DIR/poopreminder.service /etc/systemd/system/"
-    echo "  sudo systemctl daemon-reload"
-    echo "  sudo systemctl enable poopreminder"
-    echo "  sudo systemctl start poopreminder"
-    echo ""
-    echo "应用将在端口 3000 上运行。"
-    echo "如需配置反向代理，请参考 README_DEPLOY.txt"
+    # 重启服务
+    echo "🔄 重启应用..."
+    sudo cp -f "$DEPLOY_DIR/poopreminder.service" /etc/systemd/system/ 2>/dev/null || true
+    sudo systemctl daemon-reload
+    sudo systemctl restart poopreminder
+    sleep 2
+    if sudo systemctl is-active --quiet poopreminder; then
+        echo "✅ 服务已启动"
+        sudo systemctl status poopreminder --no-pager | head -5
+    else
+        echo "❌ 服务启动失败，查看日志:"
+        sudo journalctl -u poopreminder -n 10 --no-pager
+    fi
 REMOTE_SCRIPT
 
 # 清理临时文件
 rm -f poopreminder-deploy.tar.gz
 
 echo ""
-echo "🎉 部署完成！请访问服务器的 3000 端口查看应用。"
+echo "🎉 部署完成！"
