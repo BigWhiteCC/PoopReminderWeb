@@ -134,7 +134,8 @@
         <div v-for="record in records" :key="record.id" class="record-item">
           <div class="record-time">{{ formatDate(record.date) }}</div>
           <div class="record-poop-type">
-            {{ getPoopTypeEmoji(record.poopType) }}
+            {{ getPoopTypeEmoji(record.poopType) }} {{ getPoopTypeName(record.poopType) }}
+            <span v-if="getPoopTypeCategory(record.poopType)" class="record-category">（{{ getPoopTypeCategory(record.poopType) }}）</span>
             <span v-if="record.duration" class="record-duration"> · {{ formatDuration(record.duration) }}</span>
           </div>
           <div v-if="record.device" class="record-device">
@@ -249,6 +250,10 @@ function getPoopTypeEmoji(id) {
 function getPoopTypeName(id) {
   const pt = poopTypes.value.find(t => t.id === id)
   return pt ? pt.name : '未知类型'
+}
+function getPoopTypeCategory(id) {
+  const pt = poopTypes.value.find(t => t.id === id)
+  return pt ? pt.category : ''
 }
 
 async function loadData() {
@@ -649,6 +654,7 @@ onBeforeUnmount(() => {
 .record-poop-type {
   color: #4c1d95; font-size: 0.9rem; font-weight: 600; margin-top: 0.3rem;
 }
+.record-category { color: #6b7280; font-weight: 500; }
 .record-duration { color: #6b7280; font-weight: 500; }
 .record-status { color: #374151; margin-top: 0.3rem; font-size: 0.85rem; }
 .record-notes { color: #374151; margin-top: 0.3rem; font-size: 0.9rem; }

@@ -106,7 +106,8 @@
             <div class="day-record-main">
               <div class="day-record-time">{{ formatDateTime(record.date) }}</div>
               <div class="day-record-type">
-                {{ getPoopTypeEmoji(record.poopType) }}
+                {{ getPoopTypeEmoji(record.poopType) }} {{ getPoopTypeName(record.poopType) }}
+                <span v-if="getPoopTypeCategory(record.poopType)" class="day-record-category">（{{ getPoopTypeCategory(record.poopType) }}）</span>
                 <span v-if="record.duration" class="day-record-duration"> · {{ formatDuration(record.duration) }}</span>
               </div>
             </div>
@@ -134,7 +135,8 @@
           <div class="record-main">
             <div class="record-time">{{ formatDateTime(record.date) }}</div>
             <div class="record-type">
-              {{ getPoopTypeEmoji(record.poopType) }}
+              {{ getPoopTypeEmoji(record.poopType) }} {{ getPoopTypeName(record.poopType) }}
+              <span v-if="getPoopTypeCategory(record.poopType)" class="record-category">（{{ getPoopTypeCategory(record.poopType) }}）</span>
               <span v-if="record.duration" class="record-duration"> · {{ formatDuration(record.duration) }}</span>
             </div>
           </div>
@@ -257,6 +259,10 @@ function getPoopTypeEmoji(id) {
 function getPoopTypeName(id) {
   const pt = poopTypes.value.find(t => t.id === id)
   return pt ? pt.name : '未知类型'
+}
+function getPoopTypeCategory(id) {
+  const pt = poopTypes.value.find(t => t.id === id)
+  return pt ? pt.category : ''
 }
 
 function shiftWeek(n) {
@@ -537,6 +543,7 @@ onMounted(async () => {
 .day-record-main { flex: 1; min-width: 0; }
 .day-record-time { color: #667eea; font-weight: 600; font-size: 0.85rem; }
 .day-record-type { color: #4c1d95; font-size: 0.85rem; font-weight: 600; margin-top: 0.1rem; }
+.day-record-category { color: #6b7280; font-weight: 500; }
 .day-record-duration { color: #6b7280; font-weight: 500; }
 .day-record-status { font-size: 0.8rem; color: #374151; margin-top: 0.15rem; }
 .day-record-notes { font-size: 0.85rem; color: #374151; margin-top: 0.15rem; }
@@ -566,6 +573,7 @@ onMounted(async () => {
 .record-main { flex: 1; min-width: 0; }
 .record-time { color: #667eea; font-weight: 600; font-size: 0.85rem; }
 .record-type { color: #4c1d95; font-size: 0.85rem; font-weight: 600; margin-top: 0.1rem; }
+.record-category { color: #6b7280; font-weight: 500; }
 .record-duration { color: #6b7280; font-weight: 500; }
 .record-status { font-size: 0.8rem; color: #374151; margin-top: 0.15rem; }
 .record-notes { font-size: 0.85rem; color: #374151; margin-top: 0.15rem; }
