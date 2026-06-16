@@ -1,0 +1,49 @@
+name: Test & Lint
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm test -- --coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+      - name: Check for uncovered critical branches
+        run: |
+          node -e "
+            const c = require('./coverage/coverage-summary.json');
+            const lib = (c['/workspace/lib/middleware.js'] || {}).branches || { pct: 0 };
+            const utils = (c['/workspace/lib/utils.js'] || {}).branches || { pct: 0 };
+            const threshold = 80;
+            console.log('middleware branches: ' + Math.round(lib.pct) + '%');
+            console.log('utils branches:      ' + Math.round(utils.pct) + '%');
+            if (utils.pct < threshold) {
+              console.log('::warning::utils.js branch coverage (' + Math.round(utils.pct) + '%) is below ' + threshold + '%.');
+            }
+          "
