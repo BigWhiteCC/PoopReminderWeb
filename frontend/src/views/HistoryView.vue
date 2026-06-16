@@ -69,7 +69,8 @@
           <div>
             <div class="record-date">{{ formatDate(record.date) }}</div>
             <div class="record-poop-type">
-              {{ getPoopTypeEmoji(record.poopType) }}
+              {{ getPoopTypeEmoji(record.poopType) }} {{ getPoopTypeName(record.poopType) }}
+              <span v-if="getPoopTypeCategory(record.poopType)" class="record-category">（{{ getPoopTypeCategory(record.poopType) }}）</span>
               <span v-if="record.duration" class="record-duration"> · {{ formatDuration(record.duration) }}</span>
             </div>
           </div>
@@ -106,6 +107,10 @@ function getPoopTypeEmoji(id) {
 function getPoopTypeName(id) {
   const pt = poopTypes.value.find(t => t.id === id)
   return pt ? pt.name : '未知类型'
+}
+function getPoopTypeCategory(id) {
+  const pt = poopTypes.value.find(t => t.id === id)
+  return pt ? pt.category : ''
 }
 
 async function loadData() {
@@ -281,6 +286,7 @@ onMounted(async () => {
 .record-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.35rem; }
 .record-date { color: #667eea; font-weight: 600; font-size: 0.95rem; }
 .record-poop-type { color: #4c1d95; font-size: 0.9rem; font-weight: 600; margin-top: 0.15rem; }
+.record-category { color: #6b7280; font-weight: 500; }
 .record-duration { color: #6b7280; font-weight: 500; }
 .record-status { color: #374151; font-size: 0.85rem; margin-top: 0.3rem; }
 .record-notes { color: #374151; font-size: 0.9rem; margin-top: 0.3rem; }
