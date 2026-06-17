@@ -1,9 +1,3 @@
-/**
- * 前端 API 服务测试
- * 重点覆盖：ApiError 类、formatDuration/formatDurationShort 函数、buildTextFromRecords
- */
-
-// 模拟 localStorage
 const localStorageMock = {
     store: {},
     getItem: jest.fn((key) => localStorageMock.store[key] || null),
@@ -13,10 +7,8 @@ const localStorageMock = {
 };
 global.localStorage = localStorageMock;
 
-// 模拟 fetch
 global.fetch = jest.fn();
 
-// 模拟 navigator.clipboard
 Object.defineProperty(global.navigator, 'clipboard', {
     value: {
         writeText: jest.fn(() => Promise.resolve())
@@ -24,7 +16,6 @@ Object.defineProperty(global.navigator, 'clipboard', {
     writable: true
 });
 
-// 模拟 window 和 document
 global.window = {
     isSecureContext: true
 };
@@ -48,140 +39,29 @@ global.document = {
     execCommand: jest.fn(() => true)
 };
 
-// 模拟 URL
 global.URL = {
     createObjectURL: jest.fn(() => 'blob:test-url'),
     revokeObjectURL: jest.fn()
 };
 
-// 模拟 Blob
 global.Blob = jest.fn((content, options) => ({ content, options }));
 
-// 导入模块（由于是 ES 模块，需要动态导入）
 let api, ApiError, formatDuration, formatDurationShort;
 
 beforeAll(async () => {
-    // 由于 Jest 默认不支持 ES 模块，这里手动复制函数实现进行测试
-    // 实际项目中应配置 Jest 支持 ES 模块或使用 ts-jest
-    
-    ApiError = class ApiError extends Error {
-        constructor(message, statusCode, type = 'UNKNOWN') {
-            super(message);
-            this.name = 'ApiError';
-            this.statusCode = statusCode;
-            this.type = type;
-        }
-    };
-
-    formatDuration = function(seconds) {
-        const n = Number(seconds);
-        if (!n || n <= 0) return '0 秒';
-        const s = Math.floor(n);
-        if (s < 60) return `${s} 秒`;
-        const m = Math.floor(s / 60);
-        const rs = s % 60;
-        return rs > 0 ? `${m} 分 ${rs} 秒` : `${m} 分`;
-    };
-
-    formatDurationShort = function(seconds) {
-        const n = Number(seconds);
-        if (!n || n <= 0) return '0 分';
-        const minutes = n / 60;
-        if (minutes >= 1) return `${Math.round(minutes * 10) / 10} 分`;
-        return `${Math.round(n)} 秒`;
-    };
-
-    // buildTextFromRecords 实现
-    const buildTextFromRecords = function(records, { title = '拉屎记录', poopTypes = [] } = {}) {
-        const list = Array.isArray(records) ? records : [];
-        const lines = [];
-        lines.push(`${title} - ${new Date().toLocaleString('zh-CN')}`);
-        lines.push(`共 ${list.length} 条记录`);
-        lines.push('');
-        if (list.length === 0) {
-            lines.push('（当前筛选条件下暂无记录）');
-            return lines.join('\n');
-        }
-        list.forEach((r, i) => {
-            const d = r.date ? new Date(r.date) : null;
-            const dateStr = d && !isNaN(d.getTime()) ? d.toLocaleString('zh-CN') : '-';
-            lines.push(`${i + 1}. ${dateStr}`);
-            const pt = poopTypes.find(t => t.id === r.poopType);
-            lines.push(`   类型: ${pt ? pt.emoji : (r.poopType ? `编号 ${r.poopType}` : '未记录')}`);
-            const dur = Number(r.duration);
-            lines.push(`   时长: ${dur && dur > 0 ? formatDuration(dur) : '未记录'}`);
-            lines.push('');
-        });
-
-        const total = list.length;
-        const withDur = list.filter(r => Number(r.duration) > 0);
-        const avg = withDur.length
-            ? Math.round(withDur.reduce((s, r) => s + Number(r.duration), 0) / withDur.length)
-            : 0;
-        const typeCounts = {};
-        list.forEach(r => {
-            const k = r.poopType || 0;
-            typeCounts[k] = (typeCounts[k] || 0) + 1;
-        });
-        lines.push('===== 统计 =====');
-        lines.push(`总次数: ${total}`);
-        lines.push(`平均时长: ${formatDuration(avg)}`);
-        poopTypes.forEach(t => {
-            const c = typeCounts[t.id] || 0;
-            if (c > 0) lines.push(`${t.emoji} ${t.name}: ${c} 次`);
-        });
-        return lines.join('\n');
-    };
-
-    api = {
-        buildTextFromRecords,
-        downloadAsTxt: function(text, fileName) {
-            const safeName = (fileName || `poop_${Date.now()}`).replace(/[\\/:*?"<>|]/g, '_');
-            const blob = new Blob(['\uFEFF' + text], { type: 'text/plain;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${safeName}.txt`;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => {
-                URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-            }, 0);
-        },
-        copyTextToClipboard: async function(text) {
-            if (navigator.clipboard && window.isSecureContext) {
-                await navigator.clipboard.writeText(text);
-                return true;
-            }
-            // 回退方案
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            ta.style.position = 'fixed';
-            ta.style.left = '-9999px';
-            ta.style.top = '0';
-            ta.setAttribute('readonly', '');
-            document.body.appendChild(ta);
-            ta.focus();
-            ta.select();
-            ta.setSelectionRange(0, text.length);
-            let ok = false;
-            try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-            document.body.removeChild(ta);
-            if (!ok) throw new Error('剪贴板不可用，请手动复制');
-            return true;
-        }
-    };
+    const module = await import('./api.js');
+    api = module.api;
+    ApiError = module.ApiError;
+    formatDuration = module.formatDuration;
+    formatDurationShort = module.formatDurationShort;
 });
 
-// 每次测试前重置 mock
 beforeEach(() => {
     jest.clearAllMocks();
     localStorageMock.store = {};
     fetch.mockClear();
 });
 
-// ============ ApiError 类测试 ============
 describe('ApiError 类', () => {
     test('应正确创建 ApiError 实例', () => {
         const error = new ApiError('请求失败', 400, 'BAD_REQUEST');
@@ -208,7 +88,6 @@ describe('ApiError 类', () => {
     });
 });
 
-// ============ formatDuration 函数测试 ============
 describe('formatDuration - 时长格式化', () => {
     test('零或负数应返回 "0 秒"', () => {
         expect(formatDuration(0)).toBe('0 秒');
@@ -245,7 +124,6 @@ describe('formatDuration - 时长格式化', () => {
     });
 });
 
-// ============ formatDurationShort 函数测试 ============
 describe('formatDurationShort - 精简时长格式化', () => {
     test('零或负数应返回 "0 分"', () => {
         expect(formatDurationShort(0)).toBe('0 分');
@@ -268,7 +146,6 @@ describe('formatDurationShort - 精简时长格式化', () => {
     });
 });
 
-// ============ buildTextFromRecords 函数测试 ============
 describe('buildTextFromRecords - 文本生成', () => {
     const poopTypes = [
         { id: 1, name: '第1型', emoji: '🫘' },
@@ -302,7 +179,7 @@ describe('buildTextFromRecords - 文本生成', () => {
         const text = api.buildTextFromRecords(records, { poopTypes });
         expect(text).toContain('共 3 条记录');
         expect(text).toContain('总次数: 3');
-        expect(text).toContain('平均时长: 5 分'); // (300+600+120)/3 = 340秒 ≈ 5分
+        expect(text).toContain('平均时长: 5 分');
         expect(text).toContain('🍌 第4型: 1 次');
         expect(text).toContain('🫘 第1型: 1 次');
         expect(text).toContain('💧 第7型: 1 次');
@@ -339,7 +216,6 @@ describe('buildTextFromRecords - 文本生成', () => {
     });
 });
 
-// ============ copyTextToClipboard 函数测试 ============
 describe('copyTextToClipboard - 剪贴板操作', () => {
     test('在安全上下文应使用 navigator.clipboard', async () => {
         await api.copyTextToClipboard('test text');
@@ -352,7 +228,76 @@ describe('copyTextToClipboard - 剪贴板操作', () => {
     });
 });
 
-// ============ 边界条件测试 ============
+describe('downloadAsTxt - 下载文本', () => {
+    test('应正确创建下载链接', () => {
+        api.downloadAsTxt('test content', 'test_file');
+        expect(document.createElement).toHaveBeenCalledWith('a');
+        expect(URL.createObjectURL).toHaveBeenCalled();
+        expect(document.body.appendChild).toHaveBeenCalled();
+    });
+
+    test('文件名应被安全处理', () => {
+        api.downloadAsTxt('test', 'file/name?with*special:chars');
+        const a = document.createElement.mock.results[0].value;
+        expect(a.download).toBe('file_name_with_special_chars.txt');
+    });
+});
+
+describe('request 函数 - HTTP 请求', () => {
+    test('应添加 Authorization 头', async () => {
+        localStorageMock.store.token = 'test-token';
+        fetch.mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ success: true })
+        });
+
+        await api.getUserInfo();
+
+        expect(fetch).toHaveBeenCalledWith(
+            '/api/user',
+            expect.objectContaining({
+                headers: expect.objectContaining({
+                    'Authorization': 'Bearer test-token'
+                })
+            })
+        );
+    });
+
+    test('401 错误应清除本地存储', async () => {
+        localStorageMock.store.token = 'test-token';
+        localStorageMock.store.user = JSON.stringify({ id: 1 });
+
+        fetch.mockResolvedValue({
+            ok: false,
+            status: 401,
+            json: () => Promise.resolve({ error: '未授权' })
+        });
+
+        await expect(api.getUserInfo()).rejects.toThrow();
+        expect(localStorage.removeItem).toHaveBeenCalledWith('token');
+        expect(localStorage.removeItem).toHaveBeenCalledWith('user');
+    });
+
+    test('404 错误应抛出 ApiError', async () => {
+        fetch.mockResolvedValue({
+            ok: false,
+            status: 404,
+            json: () => Promise.resolve({ error: '不存在' })
+        });
+
+        await expect(api.getUserInfo()).rejects.toThrow(ApiError);
+    });
+
+    test('网络错误应抛出 NETWORK_ERROR', async () => {
+        fetch.mockRejectedValue(new TypeError('fetch failed'));
+
+        await expect(api.getUserInfo()).rejects.toMatchObject({
+            type: 'NETWORK_ERROR',
+            statusCode: 0
+        });
+    });
+});
+
 describe('边界条件', () => {
     const poopTypes = [
         { id: 1, name: '第1型', emoji: '🫘' },
@@ -360,12 +305,11 @@ describe('边界条件', () => {
     ];
 
     test('formatDuration 处理极大值', () => {
-        // 24 小时 = 86400 秒
         expect(formatDuration(86400)).toBe('1440 分');
     });
 
     test('formatDuration 处理浮点数', () => {
-        expect(formatDuration(45.9)).toBe('45 秒'); // 向下取整
+        expect(formatDuration(45.9)).toBe('45 秒');
         expect(formatDuration(90.5)).toBe('1 分 30 秒');
     });
 
