@@ -1148,6 +1148,94 @@ app.delete('/api/admin/record/:id', authenticateToken, requireAdmin, (req, res) 
     } catch (err) { res.status(500).json({ error: '删除失败' }); }
 });
 
+// 管理员重置用户密码
+app.post('/api/admin/user/:id/password', authenticateToken, requireAdmin, async (req, res) => {
+    const userId = parseInt(req.params.id);
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: '新密码至少6位' });
+    }
+
+    try {
+        const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(userId);
+        if (!user) {
+            return res.status(404).json({ error: '用户不存在' });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, userId);
+
+        res.json({ success: true, message: `用户 ${user.username} 的密码已重置` });
+    } catch (err) {
+        res.status(500).json({ error: '重置密码失败' });
+    }
+});
+
+// 管理员删除用户
+app.delete('/api/admin/user/:id', authenticateToken, requireAdmin, async (req, res) => {
+    const userId = parseInt(req.params.id);
+
+    try {
+        const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(userId);
+        if (!user) {
+            return res.status(404).json({ error: '用户不存在' });
+        }
+
+        // 不允许删除自己
+        if (userId === req.user.userId) {
+            return res.status(400).json({ error: '不能删除自己' });
+        }
+
+        // 不允许删除管理员
+        if (user.role === 'admin') {
+            return res.status(400).json({ error: '不能删除管理员账号' });
+        }
+
+        // 删除用户的记录
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+        // 删除用户
+        db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+
+        res.json({ success: true, message: `用户 ${user.username} 已删除` });
+    } catch (err) {
+        res.status(500).json({ error: '删除用户失败' });
+    }
+});
+
+// 用户修改自己的密码
+app.post('/api/user/password', authenticateToken, async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+        return res.status(400).json({ error: '请填写完整信息' });
+    }
+    if (newPassword.length < 6) {
+        return res.status(400).json({ error: '新密码至少6位' });
+    }
+
+    try {
+        const user = db.prepare('SELECT password FROM users WHERE id = ?').get(req.user.userId);
+        if (!user) {
+            return res.status(404).json({ error: '用户不存在' });
+        }
+
+        // 验证旧密码
+        const valid = await bcrypt.compare(oldPassword, user.password);
+        if (!valid) {
+            return res.status(400).json({ error: '旧密码错误' });
+        }
+
+        // 更新密码
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, req.user.userId);
+
+        res.json({ success: true, message: '密码修改成功' });
+    } catch (err) {
+        res.status(500).json({ error: '修改密码失败' });
+    }
+});
+
 try {
     app.listen(port, () => {
         console.log(`💩 Poop Reminder API listening at http://localhost:${port}`);

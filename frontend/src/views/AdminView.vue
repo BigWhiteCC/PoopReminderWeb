@@ -45,6 +45,8 @@
             <span>📋 {{ u.record_count }} 条记录</span>
             <span>📅 {{ formatDate(u.created_at) }}</span>
           </div>
+          <button class="btn btn--small btn--reset" @click.stop="openResetPassword(u)">重置密码</button>
+          <button v-if="u.role !== 'admin'" class="btn btn--small btn--danger" @click.stop="confirmDeleteUser(u)">删除</button>
         </div>
       </div>
       <div class="filter-row">
@@ -57,6 +59,49 @@
         </button>
       </div>
     </section>
+
+    <!-- 重置密码弹窗 -->
+    <div v-if="resetPasswordUser" class="modal-overlay" @click="closeResetPassword">
+      <div class="modal-content" @click.stop>
+        <h3 class="modal-title">🔐 重置密码</h3>
+        <p class="modal-subtitle">为用户 <strong>{{ resetPasswordUser.username }}</strong> 设置新密码</p>
+        <div class="modal-field">
+          <label>新密码（至少6位）</label>
+          <input
+            type="password"
+            v-model="resetPasswordValue"
+            placeholder="请输入新密码"
+            class="input"
+          />
+        </div>
+        <div v-if="resetPasswordError" class="modal-error">{{ resetPasswordError }}</div>
+        <div v-if="resetPasswordSuccess" class="modal-success">{{ resetPasswordSuccess }}</div>
+        <div class="modal-actions">
+          <button class="btn btn--secondary" @click="closeResetPassword">取消</button>
+          <button class="btn btn--primary" @click="handleResetPassword" :disabled="resetPasswordSaving">
+            {{ resetPasswordSaving ? '重置中...' : '确认重置' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除用户确认弹窗 -->
+    <div v-if="deleteUserTarget" class="modal-overlay" @click="cancelDeleteUser">
+      <div class="modal-content" @click.stop>
+        <h3 class="modal-title">⚠️ 删除用户</h3>
+        <p class="modal-subtitle">
+          确定要删除用户 <strong>{{ deleteUserTarget.username }}</strong> 吗？<br>
+          该操作将同时删除该用户的所有记录，且不可恢复！
+        </p>
+        <div v-if="deleteUserError" class="modal-error">{{ deleteUserError }}</div>
+        <div class="modal-actions">
+          <button class="btn btn--secondary" @click="cancelDeleteUser">取消</button>
+          <button class="btn btn--danger" @click="handleDeleteUser" :disabled="deleteUserSaving">
+            {{ deleteUserSaving ? '删除中...' : '确认删除' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- 筛选控制 -->
     <section class="panel">
@@ -186,6 +231,18 @@ const recordsPage = reactive({
 })
 const filter = reactive({ start: '', end: '', poop_type: '' })
 
+// 重置密码相关
+const resetPasswordUser = ref(null)
+const resetPasswordValue = ref('')
+const resetPasswordError = ref('')
+const resetPasswordSuccess = ref('')
+const resetPasswordSaving = ref(false)
+
+// 删除用户相关
+const deleteUserTarget = ref(null)
+const deleteUserError = ref('')
+const deleteUserSaving = ref(false)
+
 const poopTypes = POOP_TYPES
 
 function getPoopTypeEmoji(id) {
@@ -281,6 +338,71 @@ async function deleteRecord(id) {
     loadStats()
   } catch (e) {
     errorMessage.value = e.message
+  }
+}
+
+// 重置密码相关函数
+function openResetPassword(user) {
+  resetPasswordUser.value = user
+  resetPasswordValue.value = ''
+  resetPasswordError.value = ''
+  resetPasswordSuccess.value = ''
+}
+
+function closeResetPassword() {
+  resetPasswordUser.value = null
+  resetPasswordValue.value = ''
+  resetPasswordError.value = ''
+  resetPasswordSuccess.value = ''
+}
+
+async function handleResetPassword() {
+  if (!resetPasswordValue.value || resetPasswordValue.value.length < 6) {
+    resetPasswordError.value = '密码至少6位'
+    return
+  }
+
+  resetPasswordSaving.value = true
+  resetPasswordError.value = ''
+  resetPasswordSuccess.value = ''
+
+  try {
+    await api.adminResetUserPassword(resetPasswordUser.value.id, resetPasswordValue.value)
+    resetPasswordSuccess.value = '密码已重置成功！'
+    setTimeout(() => {
+      closeResetPassword()
+    }, 1500)
+  } catch (e) {
+    resetPasswordError.value = e.message || '重置失败'
+  } finally {
+    resetPasswordSaving.value = false
+  }
+}
+
+// 删除用户相关函数
+function confirmDeleteUser(user) {
+  deleteUserTarget.value = user
+  deleteUserError.value = ''
+}
+
+function cancelDeleteUser() {
+  deleteUserTarget.value = null
+  deleteUserError.value = ''
+}
+
+async function handleDeleteUser() {
+  deleteUserSaving.value = true
+  deleteUserError.value = ''
+
+  try {
+    await api.adminDeleteUser(deleteUserTarget.value.id)
+    // 刷新用户列表和统计
+    await Promise.all([loadUsers(), loadStats()])
+    cancelDeleteUser()
+  } catch (e) {
+    deleteUserError.value = e.message || '删除失败'
+  } finally {
+    deleteUserSaving.value = false
   }
 }
 
@@ -651,6 +773,106 @@ onMounted(async () => {
   font-size: 14px;
   background: #f7fafc;
   border-radius: 8px;
+}
+
+.btn--reset {
+  margin-top: 10px;
+  background: #ed8936;
+  color: white;
+  flex: 1;
+}
+
+.btn--reset:hover {
+  background: #dd6b20;
+}
+
+.btn--danger {
+  margin-top: 10px;
+  margin-left: 8px;
+  background: #e53e3e;
+  color: white;
+  flex: 1;
+}
+
+.btn--danger:hover {
+  background: #c53030;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-title {
+  font-size: 20px;
+  margin: 0 0 12px 0;
+  color: #2d3748;
+}
+
+.modal-subtitle {
+  font-size: 14px;
+  color: #718096;
+  margin-bottom: 20px;
+}
+
+.modal-field {
+  margin-bottom: 16px;
+}
+
+.modal-field label {
+  display: block;
+  font-size: 13px;
+  color: #4a5568;
+  margin-bottom: 6px;
+}
+
+.modal-error {
+  background: #fed7d7;
+  color: #c53030;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.modal-success {
+  background: #c6f6d5;
+  color: #276749;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.modal-actions .btn {
+  min-width: 100px;
+  height: 36px;
+  padding: 0 16px;
+  margin: 0;
+  flex: none;
 }
 
 @media (max-width: 600px) {

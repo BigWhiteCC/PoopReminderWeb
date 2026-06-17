@@ -308,6 +308,29 @@ export const api = {
 
   async adminDeleteRecord(id) {
     return request(`${API_BASE}/admin/record/${id}`, { method: 'DELETE' })
+  },
+
+  // 管理员重置用户密码
+  async adminResetUserPassword(userId, newPassword) {
+    return request(`${API_BASE}/admin/user/${userId}/password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword })
+    })
+  },
+
+  // 管理员删除用户
+  async adminDeleteUser(userId) {
+    return request(`${API_BASE}/admin/user/${userId}`, { method: 'DELETE' })
+  },
+
+  // 用户修改自己的密码
+  async changePassword(oldPassword, newPassword) {
+    return request(`${API_BASE}/user/password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldPassword, newPassword })
+    })
   }
 }
 

@@ -34,6 +34,34 @@
       </div>
     </div>
 
+    <!-- 修改密码 -->
+    <div class="settings-card password-card">
+      <h3 class="card-title">🔐 修改密码</h3>
+      
+      <div class="form-group">
+        <label>旧密码</label>
+        <input v-model="pwdForm.oldPassword" type="password" placeholder="请输入旧密码" class="form-input" />
+      </div>
+      
+      <div class="form-group">
+        <label>新密码</label>
+        <input v-model="pwdForm.newPassword" type="password" placeholder="至少6位" class="form-input" />
+      </div>
+      
+      <div class="form-group">
+        <label>确认新密码</label>
+        <input v-model="pwdForm.confirmPassword" type="password" placeholder="再次输入新密码" class="form-input" />
+      </div>
+      
+      <button class="save-btn pwd-btn" @click="handlePasswordChange" :disabled="pwdSaving">
+        {{ pwdSaving ? '修改中...' : '修改密码' }}
+      </button>
+      
+      <div v-if="pwdMessage" class="message" :class="pwdMessageType">
+        {{ pwdMessage }}
+      </div>
+    </div>
+
     <div class="tips-card">
       <h3>💪 使用提示</h3>
       <ul>
@@ -46,7 +74,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { api, ApiError } from '../services/api'
 
 const hour = ref(8)
@@ -54,6 +82,16 @@ const minute = ref(0)
 const saving = ref(false)
 const message = ref('')
 const messageType = ref('success')
+
+// 密码修改相关
+const pwdForm = reactive({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+const pwdSaving = ref(false)
+const pwdMessage = ref('')
+const pwdMessageType = ref('success')
 
 const formattedTime = computed(() => {
   return `${String(hour.value).padStart(2, '0')}:${String(minute.value).padStart(2, '0')}`
@@ -99,6 +137,50 @@ async function handleSave() {
     saving.value = false
     setTimeout(() => {
       message.value = ''
+    }, 3000)
+  }
+}
+
+async function handlePasswordChange() {
+  pwdMessage.value = ''
+  
+  // 前端校验
+  if (!pwdForm.oldPassword) {
+    pwdMessage.value = '请输入旧密码'
+    pwdMessageType.value = 'error'
+    return
+  }
+  if (!pwdForm.newPassword || pwdForm.newPassword.length < 6) {
+    pwdMessage.value = '新密码至少6位'
+    pwdMessageType.value = 'error'
+    return
+  }
+  if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+    pwdMessage.value = '两次输入的新密码不一致'
+    pwdMessageType.value = 'error'
+    return
+  }
+  
+  pwdSaving.value = true
+  try {
+    await api.changePassword(pwdForm.oldPassword, pwdForm.newPassword)
+    pwdMessage.value = '密码修改成功！'
+    pwdMessageType.value = 'success'
+    // 清空表单
+    pwdForm.oldPassword = ''
+    pwdForm.newPassword = ''
+    pwdForm.confirmPassword = ''
+  } catch (err) {
+    if (err instanceof ApiError) {
+      pwdMessage.value = err.message
+    } else {
+      pwdMessage.value = '修改失败，请稍后重试'
+    }
+    pwdMessageType.value = 'error'
+  } finally {
+    pwdSaving.value = false
+    setTimeout(() => {
+      pwdMessage.value = ''
     }, 3000)
   }
 }
@@ -279,6 +361,51 @@ onMounted(() => {
 
 .tips-card li {
   margin-bottom: 0.2rem;
+}
+
+/* 修改密码卡片 */
+.password-card {
+  margin-top: 1.25rem;
+}
+
+.card-title {
+  color: #1f2937;
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.9rem;
+  color: #4b5563;
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.12);
+}
+
+.pwd-btn {
+  margin-top: 0.5rem;
 }
 
 /* 小屏（<=480px） */
