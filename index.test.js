@@ -338,8 +338,467 @@ beforeAll(() => {
         } catch (err) { res.status(500).json({ error: '删除失败' }); }
     });
 
+    function getWeekRange(date) {
+        const d = date instanceof Date ? new Date(date) : parseDateKey(date);
+        if (!d || isNaN(d.getTime())) return null;
+        d.setHours(0, 0, 0, 0);
+        const day = d.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        const monday = new Date(d);
+        monday.setDate(d.getDate() + diff);
+        const nextMonday = new Date(monday);
+        nextMonday.setDate(monday.getDate() + 7);
+        return { start: monday, end: nextMonday };
+    }
+
+    function daysBetween(start, end) {
+        const days = [];
+        const d = new Date(start);
+        d.setHours(0, 0, 0, 0);
+        const stop = new Date(end);
+        stop.setHours(0, 0, 0, 0);
+        while (d < stop) {
+            days.push(new Date(d));
+            d.setDate(d.getDate() + 1);
+        }
+        return days;
+    }
+
+    function getWeekNumber(d) {
+        const target = new Date(d.valueOf());
+        const dayNr = (d.getDay() + 6) % 7;
+        target.setDate(target.getDate() - dayNr + 3);
+        const firstThursday = target.valueOf();
+        target.setMonth(0, 1);
+        if (target.getDay() !== 4) {
+            target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+        }
+        return 1 + Math.ceil((firstThursday - target) / 604800000);
+    }
+
+    function formatDurationSec(seconds) {
+        const n = Number(seconds);
+        if (!n || n <= 0) return '0 秒';
+        const s = Math.floor(n);
+        if (s < 60) return `${s} 秒`;
+        const m = Math.floor(s / 60);
+        const rs = s % 60;
+        return rs > 0 ? `${m} 分 ${rs} 秒` : `${m} 分`;
+    }
+
+    function parseFilterQuery(query) {
+        const filter = {};
+        if (query.start) {
+            const s = parseDateKey(query.start);
+            if (s) filter.start = s;
+        }
+        if (query.end) {
+            const e = parseDateKey(query.end);
+            if (e) { e.setHours(23, 59, 59, 999); filter.end = e; }
+        }
+        if (query.poop_type) {
+            const pt = parseInt(query.poop_type, 10);
+            if (!isNaN(pt) && pt >= 1 && pt <= 7) filter.poopType = pt;
+        }
+        return filter;
+    }
+
+    function computeStats(records) {
+        const total = records.length;
+        const typeCounts = {};
+        let totalDuration = 0;
+        let durationCount = 0;
+        records.forEach(r => {
+            const t = r.poopType || 0;
+            typeCounts[t] = (typeCounts[t] || 0) + 1;
+            if (r.duration && r.duration > 0) { totalDuration += r.duration; durationCount++; }
+        });
+        const avgDuration = durationCount ? Math.round(totalDuration / durationCount) : 0;
+
+        const byDay = {};
+        records.forEach(r => {
+            const key = toDateKey(r.date);
+            if (!key) return;
+            if (!byDay[key]) byDay[key] = { count: 0, totalDuration: 0, durationN: 0, records: [] };
+            byDay[key].count++;
+            if (r.duration && r.duration > 0) {
+                byDay[key].totalDuration += r.duration;
+                byDay[key].durationN++;
+            }
+            byDay[key].records.push(r);
+        });
+        const daily = Object.keys(byDay).sort().map(k => ({
+            date: k,
+            count: byDay[k].count,
+            avgDuration: byDay[k].durationN ? Math.round(byDay[k].totalDuration / byDay[k].durationN) : 0
+        }));
+
+        const byWeek = {};
+        records.forEach(r => {
+            const wr = getWeekRange(r.date);
+            if (!wr) return;
+            const key = `${wr.start.getFullYear()}-W${getWeekNumber(wr.start)}`;
+            if (!byWeek[key]) byWeek[key] = { key, start: wr.start.toISOString(), count: 0, totalDuration: 0, durationN: 0 };
+            byWeek[key].count++;
+            if (r.duration && r.duration > 0) {
+                byWeek[key].totalDuration += r.duration;
+                byWeek[key].durationN++;
+            }
+        });
+        const weekly = Object.values(byWeek).map(w => ({
+            key: w.key, start: w.start, count: w.count,
+            avgDuration: w.durationN ? Math.round(w.totalDuration / w.durationN) : 0
+        })).sort((a, b) => a.key.localeCompare(b.key));
+
+        return { total, typeCounts, avgDuration, daily, weekly };
+    }
+
+    function queryRecords(userId, { start, end, poopType } = {}) {
+        const startKey = start ? (start instanceof Date
+            ? `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+            : toDateKey(start)) : null;
+        const endKey = end ? (end instanceof Date
+            ? `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+            : toDateKey(end)) : null;
+
+        const conds = ['r.user_id = ?'];
+        const params = [userId];
+        if (startKey) { conds.push("date(r.date, 'localtime') >= ?"); params.push(startKey); }
+        if (endKey) { conds.push("date(r.date, 'localtime') < ?"); params.push(endKey); }
+        if (poopType) { conds.push('r.poop_type = ?'); params.push(poopType); }
+
+        const sql = `SELECT r.* FROM records r WHERE ${conds.join(' AND ')} ORDER BY COALESCE(r.created_at, r.date) DESC, r.date DESC`;
+        return db.prepare(sql).all(...params).map(mapRecord);
+    }
+
+    function extractDeviceInfo(req) {
+        const userAgent = req.headers['user-agent'] || '';
+        let deviceType = '未知设备';
+        let browser = '未知浏览器';
+        let os = '未知系统';
+        let model = '';
+
+        if (/Tablet|iPad/i.test(userAgent)) deviceType = '平板';
+        else if (/Mobi|Android|iPhone|iPod/i.test(userAgent)) deviceType = '移动设备';
+        else deviceType = '桌面电脑';
+
+        if (/Chrome/i.test(userAgent) && !/Edg/i.test(userAgent)) browser = 'Chrome';
+        else if (/Safari/i.test(userAgent) && !/Chrome/i.test(userAgent)) browser = 'Safari';
+        else if (/Firefox/i.test(userAgent)) browser = 'Firefox';
+        else if (/Edg/i.test(userAgent)) browser = 'Edge';
+        else if (/MSIE|Trident/i.test(userAgent)) browser = 'IE';
+
+        if (/Android/i.test(userAgent)) os = 'Android';
+        else if (/iPhone|iPad|iPod/i.test(userAgent)) os = 'iOS';
+        else if (/Windows NT 10/i.test(userAgent)) os = 'Windows 10/11';
+        else if (/Windows/i.test(userAgent)) os = 'Windows';
+        else if (/Mac OS X/i.test(userAgent)) os = 'macOS';
+        else if (/Linux/i.test(userAgent)) os = 'Linux';
+
+        if (/iPhone/i.test(userAgent)) model = 'iPhone';
+        else if (/iPad/i.test(userAgent)) model = 'iPad';
+        else if (/iPod/i.test(userAgent)) model = 'iPod';
+        else if (/Android/i.test(userAgent)) {
+            const brandMatch = userAgent.match(/Pixel\s*\d*[a-z]*/i)
+                || userAgent.match(/SM-[A-Z0-9]+/i)
+                || userAgent.match(/Mi\s+\d+[a-z]*/i)
+                || userAgent.match(/Redmi\s+\w*/i)
+                || userAgent.match(/Huawei\s*\w*/i)
+                || userAgent.match(/Nexus\s+\d*/i)
+                || userAgent.match(/OnePlus\s*\d*[a-z]*/i);
+            if (brandMatch) model = brandMatch[0];
+        } else if (/Macintosh/i.test(userAgent)) model = 'Mac';
+        else if (/Windows/i.test(userAgent)) model = 'Windows PC';
+
+        return {
+            type: deviceType, browser, os, model,
+            ip: (req.headers['x-forwarded-for'] || req.connection?.remoteAddress || req.ip || '').toString(),
+            userAgent
+        };
+    }
+
+    // 新增 API 路由
+    app.get('/api/weekly', authenticateToken, (req, res) => {
+        const userId = req.user.userId;
+        const base = parseDateKey(req.query.date) || new Date();
+        const { start, end } = getWeekRange(base);
+        const filter = parseFilterQuery(req.query);
+        const records = queryRecords(userId, {
+            start: filter.start || start,
+            end: filter.end || end,
+            poopType: filter.poopType
+        });
+
+        const days = daysBetween(start, end);
+        const byDay = {};
+        days.forEach(d => {
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            byDay[key] = { date: key, items: [], count: 0, totalDuration: 0, typeCounts: {} };
+        });
+
+        records.forEach(r => {
+            const key = toDateKey(r.date);
+            if (key && byDay[key]) {
+                byDay[key].items.push(r);
+                byDay[key].count++;
+                if (r.duration && r.duration > 0) byDay[key].totalDuration += r.duration;
+                byDay[key].typeCounts[r.poopType || 0] = (byDay[key].typeCounts[r.poopType || 0] || 0) + 1;
+            }
+        });
+
+        const dailyList = Object.values(byDay).map(d => ({
+            date: d.date, count: d.count,
+            avgDuration: d.count ? Math.round(d.totalDuration / d.count) : 0,
+            typeCounts: d.typeCounts
+        }));
+
+        const totalCount = dailyList.reduce((s, d) => s + d.count, 0);
+        const totalDuration = dailyList.reduce((s, d) => s + d.count * d.avgDuration, 0);
+        const typeStats = {};
+        dailyList.forEach(d => {
+            Object.keys(d.typeCounts).forEach(t => {
+                typeStats[t] = (typeStats[t] || 0) + d.typeCounts[t];
+            });
+        });
+
+        res.json({
+            range: { start: start.toISOString(), end: end.toISOString() },
+            days: dailyList,
+            summary: {
+                totalCount,
+                avgDuration: totalCount ? Math.round(totalDuration / totalCount) : 0,
+                typeStats
+            },
+            records
+        });
+    });
+
+    app.get('/api/monthly', authenticateToken, (req, res) => {
+        const userId = req.user.userId;
+        let base;
+        if (req.query.date && /^\d{4}-\d{1,2}$/.test(req.query.date)) {
+            const [y, m] = req.query.date.split('-').map(Number);
+            base = new Date(y, m - 1, 1);
+        } else {
+            base = new Date();
+        }
+        const start = new Date(base.getFullYear(), base.getMonth(), 1);
+        const end = new Date(base.getFullYear(), base.getMonth() + 1, 1);
+
+        const filter = parseFilterQuery(req.query);
+        const records = queryRecords(userId, {
+            start: filter.start || start,
+            end: filter.end || end,
+            poopType: filter.poopType
+        });
+
+        const daysInMonth = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+        const byDay = {};
+        for (let i = 1; i <= daysInMonth; i++) {
+            const key = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+            byDay[key] = { date: key, count: 0, totalDuration: 0, typeCounts: {} };
+        }
+        records.forEach(r => {
+            const key = toDateKey(r.date);
+            if (key && byDay[key]) {
+                byDay[key].count++;
+                if (r.duration && r.duration > 0) byDay[key].totalDuration += r.duration;
+                byDay[key].typeCounts[r.poopType || 0] = (byDay[key].typeCounts[r.poopType || 0] || 0) + 1;
+            }
+        });
+
+        const dailyList = Object.values(byDay).map(d => ({
+            date: d.date, count: d.count,
+            avgDuration: d.count ? Math.round(d.totalDuration / d.count) : 0,
+            typeCounts: d.typeCounts
+        }));
+
+        res.json({
+            month: `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}`,
+            range: { start: start.toISOString(), end: end.toISOString() },
+            days: dailyList,
+            summary: {
+                totalCount: dailyList.reduce((s, d) => s + d.count, 0),
+                avgDuration: dailyList.reduce((s, d) => s + d.count) ? Math.round(dailyList.reduce((s, d) => s + d.count * d.avgDuration, 0) / dailyList.reduce((s, d) => s + d.count, 0)) : 0,
+                typeStats: dailyList.reduce((acc, d) => {
+                    Object.keys(d.typeCounts).forEach(t => { acc[t] = (acc[t] || 0) + d.typeCounts[t]; });
+                    return acc;
+                }, {})
+            },
+            records
+        });
+    });
+
+    app.get('/api/records', authenticateToken, (req, res) => {
+        const userId = req.user.userId;
+        const filter = parseFilterQuery(req.query);
+        const records = queryRecords(userId, filter);
+        const stats = computeStats(records);
+        res.json({ records, stats, filter: {
+            start: filter.start ? filter.start.toISOString() : null,
+            end: filter.end ? filter.end.toISOString() : null,
+            poopType: filter.poopType || null
+        }});
+    });
+
+    app.get('/api/export', authenticateToken, (req, res) => {
+        const userId = req.user.userId;
+        const format = (req.query.format || 'csv').toString().toLowerCase();
+        const range = req.query.range || 'month';
+        const now = new Date();
+        let start, end, fileName;
+        if (range === 'week') {
+            const wr = getWeekRange(now);
+            start = wr.start; end = wr.end;
+            fileName = `weekly_${start.getFullYear()}${String(start.getMonth() + 1).padStart(2, '0')}${String(start.getDate()).padStart(2, '0')}`;
+        } else if (range === 'all') {
+            start = null; end = null;
+            fileName = 'all_records';
+        } else {
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+            fileName = `monthly_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        const filter = parseFilterQuery(req.query);
+        const records = queryRecords(userId, {
+            start: filter.start || start,
+            end: filter.end || end,
+            poopType: filter.poopType
+        });
+
+        if (format === 'txt') {
+            const lines = [];
+            lines.push(`拉屎记录导出 - ${new Date().toLocaleString('zh-CN')}`);
+            lines.push(`共 ${records.length} 条记录`);
+            lines.push('');
+            records.forEach((r, i) => {
+                const d = new Date(r.date);
+                lines.push(`${i + 1}. ${d.toLocaleString('zh-CN')}`);
+                const type = POOP_TYPES.find(t => t.id === r.poopType);
+                lines.push(`   类型: ${type ? `${type.emoji} ${type.name}` : '未记录'}`);
+                lines.push(`   时长: ${r.duration ? formatDurationSec(r.duration) : '未记录'}`);
+                lines.push('');
+            });
+            const txt = '\uFEFF' + lines.join('\n');
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${fileName}.txt"`);
+            res.send(txt);
+            return;
+        }
+
+        const rows = [['日期', '时间', '类型编号', '类型名称', '持续时长(秒)', '状态', '备注']];
+        records.forEach(r => {
+            const d = new Date(r.date);
+            const type = POOP_TYPES.find(t => t.id === r.poopType);
+            rows.push([
+                `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+                `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+                r.poopType || '',
+                type ? type.name : '',
+                r.duration || 0,
+                r.status || '',
+                (r.notes || '').replace(/\s+/g, ' ')
+            ]);
+        });
+        const escape = v => `"${String(v).replace(/"/g, '""')}"`;
+        const csv = '\uFEFF' + rows.map(r => r.map(escape).join(',')).join('\r\n');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}.csv"`);
+        res.send(csv);
+    });
+
+    app.get('/api/admin/stats', authenticateToken, requireAdmin, (req, res) => {
+        try {
+            const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+            const recordCount = db.prepare('SELECT COUNT(*) as c FROM records').get().c;
+            const adminCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin'").get().c;
+
+            res.json({ userCount, recordCount, adminCount });
+        } catch (err) { res.status(500).json({ error: '查询失败' }); }
+    });
+
+    app.post('/api/admin/user/:id/password', authenticateToken, requireAdmin, async (req, res) => {
+        const userId = parseInt(req.params.id);
+        const { newPassword } = req.body;
+
+        if (!newPassword || newPassword.length < 6) {
+            return res.status(400).json({ error: '新密码至少6位' });
+        }
+
+        try {
+            const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(userId);
+            if (!user) {
+                return res.status(404).json({ error: '用户不存在' });
+            }
+
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, userId);
+
+            res.json({ success: true, message: `用户 ${user.username} 的密码已重置` });
+        } catch (err) {
+            res.status(500).json({ error: '重置密码失败' });
+        }
+    });
+
+    app.delete('/api/admin/user/:id', authenticateToken, requireAdmin, async (req, res) => {
+        const userId = parseInt(req.params.id);
+
+        try {
+            const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(userId);
+            if (!user) {
+                return res.status(404).json({ error: '用户不存在' });
+            }
+
+            if (userId === req.user.userId) {
+                return res.status(400).json({ error: '不能删除自己' });
+            }
+
+            if (user.role === 'admin') {
+                return res.status(400).json({ error: '不能删除管理员账号' });
+            }
+
+            db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+
+            res.json({ success: true, message: `用户 ${user.username} 已删除` });
+        } catch (err) {
+            res.status(500).json({ error: '删除用户失败' });
+        }
+    });
+
+    app.post('/api/user/password', authenticateToken, async (req, res) => {
+        const { oldPassword, newPassword } = req.body;
+
+        if (!oldPassword || !newPassword) {
+            return res.status(400).json({ error: '请填写完整信息' });
+        }
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: '新密码至少6位' });
+        }
+
+        try {
+            const user = db.prepare('SELECT password FROM users WHERE id = ?').get(req.user.userId);
+            if (!user) {
+                return res.status(404).json({ error: '用户不存在' });
+            }
+
+            const valid = await bcrypt.compare(oldPassword, user.password);
+            if (!valid) {
+                return res.status(400).json({ error: '旧密码错误' });
+            }
+
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, req.user.userId);
+
+            res.json({ success: true, message: '密码修改成功' });
+        } catch (err) {
+            res.status(500).json({ error: '修改密码失败' });
+        }
+    });
+
     // 导出核心函数供单元测试使用
-    app.locals.testHelpers = { toDateKey, parseDateKey, calculateStreak };
+    app.locals.testHelpers = { toDateKey, parseDateKey, calculateStreak, getWeekRange, getWeekNumber, daysBetween, formatDurationSec, parseFilterQuery, computeStats, queryRecords, extractDeviceInfo };
 });
 
 afterAll(() => {
@@ -770,7 +1229,6 @@ describe('公共 API', () => {
 // ============ API 集成测试：首页数据 ============
 describe('首页 API', () => {
     test('获取首页数据应包含连续打卡信息', async () => {
-        // 创建今天的记录
         const today = new Date();
         db.prepare('INSERT INTO records (user_id, date, poop_type, created_at) VALUES (?, ?, ?, ?)').run(
             testUserId, today.toISOString(), 4, new Date().toISOString()
@@ -783,7 +1241,474 @@ describe('首页 API', () => {
         expect(res.body.streak).toBeGreaterThanOrEqual(1);
         expect(res.body.records).toBeDefined();
 
-        // 清理
         db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+});
+
+// ============ 单元测试：工具函数 ============
+describe('getWeekRange - 周范围计算', () => {
+    let getWeekRange;
+
+    beforeAll(() => {
+        getWeekRange = app.locals.testHelpers.getWeekRange;
+    });
+
+    test('周一应返回当周周一到下周一', () => {
+        const monday = new Date(2024, 0, 15); // 2024-01-15 周一
+        const result = getWeekRange(monday);
+        expect(result).not.toBeNull();
+        expect(result.start.getDate()).toBe(15);
+        expect(result.end.getDate()).toBe(22);
+    });
+
+    test('周日应返回上周一到本周一', () => {
+        const sunday = new Date(2024, 0, 14); // 2024-01-14 周日
+        const result = getWeekRange(sunday);
+        expect(result).not.toBeNull();
+        expect(result.start.getDate()).toBe(8);
+        expect(result.end.getDate()).toBe(15);
+    });
+
+    test('无效日期应返回 null', () => {
+        expect(getWeekRange(null)).toBeNull();
+        expect(getWeekRange('invalid')).toBeNull();
+    });
+});
+
+describe('daysBetween - 日期范围生成', () => {
+    let daysBetween;
+
+    beforeAll(() => {
+        daysBetween = app.locals.testHelpers.daysBetween;
+    });
+
+    test('应生成两个日期之间的所有天', () => {
+        const start = new Date(2024, 0, 15);
+        const end = new Date(2024, 0, 18);
+        const result = daysBetween(start, end);
+        expect(result.length).toBe(3);
+        expect(result[0].getDate()).toBe(15);
+        expect(result[1].getDate()).toBe(16);
+        expect(result[2].getDate()).toBe(17);
+    });
+
+    test('同一天应返回空数组', () => {
+        const start = new Date(2024, 0, 15);
+        const end = new Date(2024, 0, 15);
+        const result = daysBetween(start, end);
+        expect(result.length).toBe(0);
+    });
+});
+
+describe('getWeekNumber - ISO周数', () => {
+    let getWeekNumber;
+
+    beforeAll(() => {
+        getWeekNumber = app.locals.testHelpers.getWeekNumber;
+    });
+
+    test('应正确计算周数', () => {
+        const d = new Date(2024, 0, 1); // 2024-01-01
+        const result = getWeekNumber(d);
+        expect(result).toBeGreaterThan(0);
+        expect(result).toBeLessThanOrEqual(52);
+    });
+});
+
+describe('formatDurationSec - 时长格式化', () => {
+    let formatDurationSec;
+
+    beforeAll(() => {
+        formatDurationSec = app.locals.testHelpers.formatDurationSec;
+    });
+
+    test('零值应返回 "0 秒"', () => {
+        expect(formatDurationSec(0)).toBe('0 秒');
+        expect(formatDurationSec(null)).toBe('0 秒');
+    });
+
+    test('小于60秒应返回秒数', () => {
+        expect(formatDurationSec(30)).toBe('30 秒');
+    });
+
+    test('超过60秒应返回分秒组合', () => {
+        expect(formatDurationSec(90)).toBe('1 分 30 秒');
+        expect(formatDurationSec(120)).toBe('2 分');
+    });
+});
+
+describe('parseFilterQuery - 筛选参数解析', () => {
+    let parseFilterQuery;
+
+    beforeAll(() => {
+        parseFilterQuery = app.locals.testHelpers.parseFilterQuery;
+    });
+
+    test('应正确解析有效参数', () => {
+        const result = parseFilterQuery({
+            start: '2024-01-01',
+            end: '2024-01-31',
+            poop_type: '4'
+        });
+        expect(result.start).toBeDefined();
+        expect(result.end).toBeDefined();
+        expect(result.poopType).toBe(4);
+    });
+
+    test('无效参数应被忽略', () => {
+        const result = parseFilterQuery({
+            start: 'invalid',
+            end: 'invalid',
+            poop_type: '8'
+        });
+        expect(result.start).toBeUndefined();
+        expect(result.end).toBeUndefined();
+        expect(result.poopType).toBeUndefined();
+    });
+
+    test('空参数应返回空对象', () => {
+        const result = parseFilterQuery({});
+        expect(Object.keys(result).length).toBe(0);
+    });
+});
+
+describe('extractDeviceInfo - 设备信息提取', () => {
+    let extractDeviceInfo;
+
+    beforeAll(() => {
+        extractDeviceInfo = app.locals.testHelpers.extractDeviceInfo;
+    });
+
+    test('应识别 Chrome 浏览器', () => {
+        const result = extractDeviceInfo({
+            headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+            ip: '127.0.0.1'
+        });
+        expect(result.browser).toBe('Chrome');
+        expect(result.os).toBe('Windows 10/11');
+        expect(result.type).toBe('桌面电脑');
+        expect(result.model).toBe('Windows PC');
+    });
+
+    test('应识别移动端 Safari', () => {
+        const result = extractDeviceInfo({
+            headers: { 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
+            ip: '127.0.0.1'
+        });
+        expect(result.browser).toBe('Safari');
+        expect(result.os).toBe('iOS');
+        expect(result.type).toBe('移动设备');
+        expect(result.model).toBe('iPhone');
+    });
+
+    test('应识别 Android 设备', () => {
+        const result = extractDeviceInfo({
+            headers: { 'user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36' },
+            ip: '127.0.0.1'
+        });
+        expect(result.os).toBe('Android');
+        expect(result.type).toBe('移动设备');
+        expect(result.model).toBe('Pixel 7');
+    });
+
+    test('空 user-agent 应返回默认值', () => {
+        const result = extractDeviceInfo({
+            headers: {},
+            ip: '127.0.0.1'
+        });
+        expect(result.type).toBe('桌面电脑');
+        expect(result.browser).toBe('未知浏览器');
+        expect(result.os).toBe('未知系统');
+    });
+
+    test('应提取 IP 地址', () => {
+        const result = extractDeviceInfo({
+            headers: { 'x-forwarded-for': '192.168.1.100', 'user-agent': '' },
+            ip: '127.0.0.1'
+        });
+        expect(result.ip).toBe('192.168.1.100');
+    });
+});
+
+// ============ 单元测试：业务逻辑 ============
+describe('computeStats - 统计计算', () => {
+    let computeStats;
+
+    beforeAll(() => {
+        computeStats = app.locals.testHelpers.computeStats;
+    });
+
+    test('空记录应返回零值统计', () => {
+        const result = computeStats([]);
+        expect(result.total).toBe(0);
+        expect(result.avgDuration).toBe(0);
+        expect(result.daily.length).toBe(0);
+        expect(result.weekly.length).toBe(0);
+    });
+
+    test('应正确计算类型分布和平均时长', () => {
+        const records = [
+            { date: '2024-01-15T08:00:00', poopType: 4, duration: 300 },
+            { date: '2024-01-15T12:00:00', poopType: 4, duration: 240 },
+            { date: '2024-01-16T08:00:00', poopType: 3, duration: 180 }
+        ];
+        const result = computeStats(records);
+        expect(result.total).toBe(3);
+        expect(result.typeCounts[4]).toBe(2);
+        expect(result.typeCounts[3]).toBe(1);
+        expect(result.avgDuration).toBe(240);
+        expect(result.daily.length).toBe(2);
+    });
+
+    test('应正确计算周统计', () => {
+        const records = [
+            { date: '2024-01-15T08:00:00', poopType: 4, duration: 300 },
+            { date: '2024-01-22T08:00:00', poopType: 4, duration: 240 }
+        ];
+        const result = computeStats(records);
+        expect(result.weekly.length).toBe(2);
+    });
+});
+
+describe('queryRecords - 记录查询', () => {
+    let queryRecords;
+
+    beforeAll(() => {
+        queryRecords = app.locals.testHelpers.queryRecords;
+    });
+
+    test('应正确查询用户记录', () => {
+        const today = new Date();
+        db.prepare('INSERT INTO records (user_id, date, poop_type, created_at) VALUES (?, ?, ?, ?)').run(
+            testUserId, today.toISOString(), 4, new Date().toISOString()
+        );
+
+        const result = queryRecords(testUserId);
+        expect(result.length).toBeGreaterThan(0);
+        expect(result[0].poopType).toBe(4);
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+
+    test('应支持按类型筛选', () => {
+        const today = new Date();
+        db.prepare('INSERT INTO records (user_id, date, poop_type, created_at) VALUES (?, ?, ?, ?)').run(
+            testUserId, today.toISOString(), 4, new Date().toISOString()
+        );
+        db.prepare('INSERT INTO records (user_id, date, poop_type, created_at) VALUES (?, ?, ?, ?)').run(
+            testUserId, today.toISOString(), 3, new Date().toISOString()
+        );
+
+        const result = queryRecords(testUserId, { poopType: 4 });
+        expect(result.length).toBe(1);
+        expect(result[0].poopType).toBe(4);
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+});
+
+// ============ API 集成测试：周视图 ============
+describe('周视图 API', () => {
+    test('获取周数据应成功', async () => {
+        const today = new Date();
+        db.prepare('INSERT INTO records (user_id, date, poop_type, created_at) VALUES (?, ?, ?, ?)').run(
+            testUserId, today.toISOString(), 4, new Date().toISOString()
+        );
+
+        const res = await request(app).get('/api/weekly')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.days).toBeDefined();
+        expect(res.body.days.length).toBe(7);
+        expect(res.body.summary).toBeDefined();
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+
+    test('支持按日期查询特定周', async () => {
+        const res = await request(app).get('/api/weekly?date=2024-01-15')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.range).toBeDefined();
+    });
+
+    test('支持按类型筛选', async () => {
+        const res = await request(app).get('/api/weekly?poop_type=4')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+    });
+});
+
+// ============ API 集成测试：月视图 ============
+describe('月视图 API', () => {
+    test('获取月数据应成功', async () => {
+        const today = new Date();
+        db.prepare('INSERT INTO records (user_id, date, poop_type, created_at) VALUES (?, ?, ?, ?)').run(
+            testUserId, today.toISOString(), 4, new Date().toISOString()
+        );
+
+        const res = await request(app).get('/api/monthly')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.days).toBeDefined();
+        expect(res.body.month).toBeDefined();
+        expect(res.body.summary).toBeDefined();
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+
+    test('支持查询特定月份', async () => {
+        const res = await request(app).get('/api/monthly?date=2024-01')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.month).toBe('2024-01');
+    });
+});
+
+// ============ API 集成测试：记录列表 ============
+describe('记录列表 API', () => {
+    test('获取记录列表应成功', async () => {
+        const today = new Date();
+        db.prepare('INSERT INTO records (user_id, date, poop_type, created_at) VALUES (?, ?, ?, ?)').run(
+            testUserId, today.toISOString(), 4, new Date().toISOString()
+        );
+
+        const res = await request(app).get('/api/records')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.records).toBeDefined();
+        expect(res.body.stats).toBeDefined();
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+
+    test('支持日期范围筛选', async () => {
+        const res = await request(app).get('/api/records?start=2024-01-01&end=2024-01-31')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+    });
+});
+
+// ============ API 集成测试：导出功能 ============
+describe('导出 API', () => {
+    test('导出 CSV 应成功', async () => {
+        const today = new Date();
+        db.prepare('INSERT INTO records (user_id, date, poop_type, created_at) VALUES (?, ?, ?, ?)').run(
+            testUserId, today.toISOString(), 4, new Date().toISOString()
+        );
+
+        const res = await request(app).get('/api/export')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.headers['content-type']).toContain('text/csv');
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+
+    test('导出 TXT 应成功', async () => {
+        const res = await request(app).get('/api/export?format=txt')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.headers['content-type']).toContain('text/plain');
+    });
+
+    test('支持周范围导出', async () => {
+        const res = await request(app).get('/api/export?range=week')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+    });
+});
+
+// ============ API 集成测试：管理员统计 ============
+describe('管理员统计 API', () => {
+    test('管理员获取统计应成功', async () => {
+        const res = await request(app).get('/api/admin/stats')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.userCount).toBeDefined();
+        expect(res.body.recordCount).toBeDefined();
+        expect(res.body.adminCount).toBeDefined();
+    });
+
+    test('普通用户获取统计应返回 403', async () => {
+        const res = await request(app).get('/api/admin/stats')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(403);
+    });
+});
+
+// ============ API 集成测试：管理员用户管理 ============
+describe('管理员用户管理 API', () => {
+    test('重置用户密码应成功', async () => {
+        const res = await request(app).post('/api/admin/user/1/password')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ newPassword: 'newpassword123' });
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+    });
+
+    test('重置密码过短应返回 400', async () => {
+        const res = await request(app).post('/api/admin/user/1/password')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ newPassword: '123' });
+        expect(res.status).toBe(400);
+    });
+
+    test('删除普通用户应成功', async () => {
+        const newUserId = db.prepare('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)').run('testdelete', 'testdelete@test.com', bcrypt.hashSync('pass', 10), 'user').lastInsertRowid;
+
+        const res = await request(app).delete(`/api/admin/user/${newUserId}`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+    });
+
+    test('删除自己应返回 400', async () => {
+        const res = await request(app).delete(`/api/admin/user/${adminUserId}`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(400);
+    });
+
+    test('删除管理员应返回 400', async () => {
+        const res = await request(app).delete(`/api/admin/user/${adminUserId}`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(400);
+    });
+});
+
+// ============ API 集成测试：用户修改密码 ============
+describe('用户修改密码 API', () => {
+    beforeEach(() => {
+        const hashedPassword = bcrypt.hashSync('test123', 10);
+        db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, testUserId);
+    });
+
+    test('修改密码应成功', async () => {
+        const res = await request(app).post('/api/user/password')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ oldPassword: 'test123', newPassword: 'newpassword123' });
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+    });
+
+    test('旧密码错误应返回 400', async () => {
+        const res = await request(app).post('/api/user/password')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ oldPassword: 'wrongpassword', newPassword: 'newpassword123' });
+        expect(res.status).toBe(400);
+    });
+
+    test('新密码过短应返回 400', async () => {
+        const res = await request(app).post('/api/user/password')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ oldPassword: 'test123', newPassword: '123' });
+        expect(res.status).toBe(400);
+    });
+
+    test('缺少字段应返回 400', async () => {
+        const res = await request(app).post('/api/user/password')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ oldPassword: 'test123' });
+        expect(res.status).toBe(400);
     });
 });
