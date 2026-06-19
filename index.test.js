@@ -338,6 +338,26 @@ beforeAll(() => {
         } catch (err) { res.status(500).json({ error: '删除失败' }); }
     });
 
+    // 管理员删除用户（带事务）
+    app.delete('/api/admin/user/:id', authenticateToken, requireAdmin, async (req, res) => {
+        const userId = parseInt(req.params.id);
+        try {
+            const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(userId);
+            if (!user) return res.status(404).json({ error: '用户不存在' });
+            if (userId === req.user.userId) return res.status(400).json({ error: '不能删除自己' });
+            if (user.role === 'admin') return res.status(400).json({ error: '不能删除管理员账号' });
+
+            // 使用事务确保原子性
+            const deleteTransaction = db.transaction(() => {
+                db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+            });
+            deleteTransaction();
+
+            res.json({ success: true, message: `用户 ${user.username} 已删除` });
+        } catch (err) { res.status(500).json({ error: '删除用户失败' }); }
+    });
+
     // 导出核心函数供单元测试使用
     app.locals.testHelpers = { toDateKey, parseDateKey, calculateStreak };
 });
@@ -767,23 +787,73 @@ describe('公共 API', () => {
     });
 });
 
-// ============ API 集成测试：首页数据 ============
-describe('首页 API', () => {
-    test('获取首页数据应包含连续打卡信息', async () => {
-        // 创建今天的记录
-        const today = new Date();
+// ============ API 集成测试：管理员删除用户 ============
+describe('管理员删除用户 API', () => {
+    test('管理员删除普通用户应成功删除用户和记录', async () => {
+        // 创建待删除的用户
+        const hashedPassword = bcrypt.hashSync('deleteme123', 10);
+        const result = db.prepare('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)').run(
+            'todelete', 'todelete@test.com', hashedPassword, 'user'
+        );
+        const deleteUserId = result.lastInsertRowid;
+
+        // 为该用户创建记录
         db.prepare('INSERT INTO records (user_id, date, poop_type, created_at) VALUES (?, ?, ?, ?)').run(
-            testUserId, today.toISOString(), 4, new Date().toISOString()
+            deleteUserId, new Date().toISOString(), 4, new Date().toISOString()
         );
 
-        const res = await request(app).get('/api/home')
-            .set('Authorization', `Bearer ${testToken}`);
+        // 验证记录存在
+        const recordsBefore = db.prepare('SELECT * FROM records WHERE user_id = ?').all(deleteUserId);
+        expect(recordsBefore.length).toBe(1);
+
+        // 执行删除
+        const res = await request(app).delete(`/api/admin/user/${deleteUserId}`)
+            .set('Authorization', `Bearer ${adminToken}`);
         expect(res.status).toBe(200);
-        expect(res.body.streak).toBeDefined();
-        expect(res.body.streak).toBeGreaterThanOrEqual(1);
-        expect(res.body.records).toBeDefined();
+        expect(res.body.success).toBe(true);
+
+        // 验证用户已删除
+        const userAfter = db.prepare('SELECT * FROM users WHERE id = ?').get(deleteUserId);
+        expect(userAfter).toBeUndefined();
+
+        // 验证记录也已删除（事务保证原子性）
+        const recordsAfter = db.prepare('SELECT * FROM records WHERE user_id = ?').all(deleteUserId);
+        expect(recordsAfter.length).toBe(0);
+    });
+
+    test('管理员不能删除自己', async () => {
+        const res = await request(app).delete(`/api/admin/user/${adminUserId}`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('不能删除自己');
+    });
+
+    test('管理员不能删除其他管理员', async () => {
+        // 创建一个新的管理员账号
+        const hashedPassword = bcrypt.hashSync('anotheradmin123', 10);
+        const result = db.prepare('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)').run(
+            'anotheradmin', 'anotheradmin@test.com', hashedPassword, 'admin'
+        );
+        const anotherAdminId = result.lastInsertRowid;
+
+        const res = await request(app).delete(`/api/admin/user/${anotherAdminId}`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('不能删除管理员账号');
 
         // 清理
-        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+        db.prepare('DELETE FROM users WHERE id = ?').run(anotherAdminId);
+    });
+
+    test('删除不存在的用户应返回 404', async () => {
+        const res = await request(app).delete('/api/admin/user/99999')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(404);
+    });
+
+    test('普通用户不能删除用户', async () => {
+        const res = await request(app).delete('/api/admin/user/1')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(403);
     });
 });

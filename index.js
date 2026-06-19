@@ -1192,10 +1192,12 @@ app.delete('/api/admin/user/:id', authenticateToken, requireAdmin, async (req, r
             return res.status(400).json({ error: '不能删除管理员账号' });
         }
 
-        // 删除用户的记录
-        db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
-        // 删除用户
-        db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+        // 使用事务确保原子性：记录和用户要么同时删除，要么都不删除
+        const deleteTransaction = db.transaction(() => {
+            db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+        });
+        deleteTransaction();
 
         res.json({ success: true, message: `用户 ${user.username} 已删除` });
     } catch (err) {
