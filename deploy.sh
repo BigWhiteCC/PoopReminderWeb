@@ -87,7 +87,9 @@ ssh -p $SSH_PORT "$DEST" bash << 'REMOTE'
     echo "📂 解压新部署..."
     rm -rf /opt/poopreminder
     mkdir -p /opt/poopreminder
-    tar xzf /tmp/poopreminder-deploy-*.tar.gz -C /opt/poopreminder
+    tar xzf /tmp/poopreminder-deploy-*.tar.gz -C /opt/poopreminder --strip-components=1</parameter>
+</tool_call>
+</minimax:tool_call>
 
     # 恢复数据库
     if [ -f /tmp/poopreminder.db.bak ]; then
