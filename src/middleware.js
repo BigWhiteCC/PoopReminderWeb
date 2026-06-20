@@ -67,8 +67,9 @@ function authenticateToken(req, res, next) {
 
         try {
             const db = getDb();
-            const row = db.prepare('SELECT password_changed_at FROM users WHERE id = ?').get(user.userId);
+            const row = db.prepare('SELECT password_changed_at, enabled FROM users WHERE id = ?').get(user.userId);
             if (!row) return res.status(403).json({ error: 'User not found' });
+            if (row.enabled === 0) return res.status(403).json({ error: '账号已被禁用，请联系管理员' });
             if (row.password_changed_at && user.iat) {
                 const changedAt = new Date(row.password_changed_at).getTime();
                 const issuedAt = user.iat * 1000;

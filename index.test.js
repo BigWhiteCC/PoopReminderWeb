@@ -33,6 +33,7 @@ beforeAll(() => {
             email TEXT NOT NULL UNIQUE,
             password TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'user',
+            enabled INTEGER DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS records (
@@ -176,6 +177,10 @@ beforeAll(() => {
         if (!token) return res.status(401).json({ error: 'Unauthorized' });
         jwt.verify(token, JWT_SECRET, (err, user) => {
             if (err) return res.status(403).json({ error: 'Invalid token' });
+            const row = db.prepare('SELECT enabled FROM users WHERE id = ?').get(user.userId);
+            if (!row || row.enabled === 0) {
+                return res.status(403).json({ error: '账号已被禁用，请联系管理员' });
+            }
             req.user = user;
             next();
         });
@@ -333,6 +338,8 @@ beforeAll(() => {
 
     app.delete('/api/admin/record/:id', authenticateToken, requireAdmin, (req, res) => {
         try {
+            const record = db.prepare('SELECT id, user_id FROM records WHERE id = ?').get(req.params.id);
+            if (!record) return res.status(404).json({ error: '记录不存在' });
             db.prepare('DELETE FROM records WHERE id = ?').run(req.params.id);
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: '删除失败' }); }
@@ -595,6 +602,14 @@ describe('认证中间件', () => {
         expect(res.body.username).toBe('testuser');
         expect(res.body.email).toBe('test@test.com');
     });
+
+    test('禁用用户的有效 token 应返回 403', async () => {
+        db.prepare('UPDATE users SET enabled = 0 WHERE id = ?').run(testUserId);
+        const res = await request(app).get('/api/user').set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(403);
+        expect(res.body.error).toContain('已被禁用');
+        db.prepare('UPDATE users SET enabled = 1 WHERE id = ?').run(testUserId);
+    });
 });
 
 // ============ API 集成测试：记录 CRUD ============
@@ -747,6 +762,13 @@ describe('管理员 API - 权限校验', () => {
         // 验证已删除
         const record = db.prepare('SELECT * FROM records WHERE id = ?').get(recordId);
         expect(record).toBeUndefined();
+    });
+
+    test('管理员删除不存在的记录应返回 404', async () => {
+        const res = await request(app).delete('/api/admin/record/99999')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(404);
+        expect(res.body.error).toContain('记录不存在');
     });
 
     test('无认证访问管理员接口应返回 401', async () => {
