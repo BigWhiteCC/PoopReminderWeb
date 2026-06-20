@@ -7,17 +7,17 @@
     <!-- 筛选器 -->
     <div class="filter-card">
       <div class="filter-grid">
-        <label class="field">
+        <label class="field" for="history-start">
           <span>开始日期</span>
-          <input type="date" v-model="filter.start" class="input" />
+          <input id="history-start" type="date" v-model="filter.start" class="input" />
         </label>
-        <label class="field">
+        <label class="field" for="history-end">
           <span>结束日期</span>
-          <input type="date" v-model="filter.end" class="input" />
+          <input id="history-end" type="date" v-model="filter.end" class="input" />
         </label>
-        <label class="field">
+        <label class="field" for="history-type">
           <span>大便类型</span>
-          <select v-model="filter.poop_type" class="input">
+          <select id="history-type" v-model="filter.poop_type" class="input">
             <option value="">全部</option>
             <option v-for="pt in poopTypes" :key="pt.id" :value="pt.id">
               {{ pt.emoji }} {{ pt.name }}
@@ -26,8 +26,8 @@
         </label>
       </div>
       <div class="filter-actions">
-        <button class="btn btn-outline" @click="resetFilter">重置</button>
-        <button class="btn btn-primary" @click="loadData">查询</button>
+        <button type="button" class="btn btn-outline" @click="resetFilter">重置</button>
+        <button type="button" class="btn btn-primary" @click="loadData">查询</button>
       </div>
     </div>
 
@@ -204,33 +204,35 @@ onMounted(async () => {
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .page-title {
-  font-size: 1.5rem; color: #1f2937;
+  font-size: 1.5rem; color: var(--color-text);
   margin-bottom: 1rem; text-align: center; font-weight: 700;
 }
 
 .error-message {
-  background: #fef2f2; color: #dc2626; padding: 0.85rem 1rem;
-  border-radius: 12px; margin-bottom: 0.75rem; text-align: center;
+  background: var(--color-danger-soft); color: var(--color-danger-dark); padding: 0.85rem 1rem;
+  border-radius: var(--radius-md); margin-bottom: 0.75rem; text-align: center;
   font-size: 0.95rem;
 }
 
 .filter-card {
-  background: white; border-radius: 16px; padding: 1rem;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 1rem;
+  background: var(--color-surface); border-radius: var(--radius-xl); padding: 1rem;
+  box-shadow: var(--shadow-sm); margin-bottom: 1rem;
 }
 
 .filter-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;
 }
-.field { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.8rem; color: #374151; font-weight: 500; }
+.field { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.8rem; color: var(--color-text-2); font-weight: 500; }
 
 .input {
-  width: 100%; padding: 0.65rem 0.75rem; border: 2px solid #e5e7eb;
-  border-radius: 10px; font-size: 0.95rem;
-  -webkit-appearance: none; appearance: none; background: #fff;
+  width: 100%; padding: 0.65rem 0.75rem; border: 2px solid var(--color-border);
+  border-radius: var(--radius-md); font-size: 0.95rem;
+  -webkit-appearance: none; appearance: none; background: var(--color-surface);
+  color: var(--color-text);
+  transition: border-color 0.15s var(--ease-default), box-shadow 0.15s var(--ease-default);
 }
 .input:focus {
-  outline: none; border-color: #667eea;
+  outline: none; border-color: var(--color-primary);
   box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.12);
 }
 
@@ -239,24 +241,26 @@ onMounted(async () => {
 }
 
 .btn {
-  padding: 0.6rem 1rem; border-radius: 10px; font-size: 0.95rem;
+  padding: 0.6rem 1rem; border-radius: var(--radius-md); font-size: 0.95rem;
   font-weight: 600; cursor: pointer; border: 2px solid transparent;
-  transition: all 0.2s ease; min-height: 42px;
+  transition: background-color 0.15s var(--ease-default), transform 0.1s ease, box-shadow 0.15s var(--ease-default);
+  min-height: 42px;
 }
+.btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;
-  box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%); color: white;
+  box-shadow: var(--shadow-primary);
 }
 .btn-outline {
-  background: white; color: #667eea; border-color: #cbd5e1;
+  background: var(--color-surface); color: var(--color-primary); border-color: var(--color-border-2);
 }
 .btn:active { transform: scale(0.97); }
 
 .stats-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 16px; padding: 1rem; color: white;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%);
+  border-radius: var(--radius-xl); padding: 1rem; color: white;
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;
-  margin-bottom: 1rem; box-shadow: 0 4px 20px rgba(102,126,234,0.3);
+  margin-bottom: 1rem; box-shadow: var(--shadow-primary);
 }
 .stat { text-align: center; }
 .stat-label { font-size: 0.75rem; opacity: 0.9; }
@@ -264,40 +268,45 @@ onMounted(async () => {
 
 .export-row { display: flex; gap: 0.5rem; justify-content: flex-end; margin-bottom: 1rem; }
 
-.loading { text-align: center; padding: 3rem 1rem; color: #6b7280; }
+.loading { text-align: center; padding: 3rem 1rem; color: var(--color-text-3); }
 .spinner {
-  width: 36px; height: 36px; border: 4px solid #e5e7eb; border-top-color: #667eea;
+  width: 36px; height: 36px; border: 4px solid var(--color-border); border-top-color: var(--color-primary);
   border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 0.5rem;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .empty-state {
-  background: white; border-radius: 16px; padding: 3rem 1rem;
-  text-align: center; color: #6b7280; box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+  background: var(--color-surface); border-radius: var(--radius-xl); padding: 3rem 1rem;
+  text-align: center; color: var(--color-text-3); box-shadow: var(--shadow-sm);
 }
 .empty-icon { font-size: 3rem; margin-bottom: 0.5rem; }
 
 .records-grid { display: grid; gap: 0.75rem; }
 
 .record-card {
-  background: white; border-radius: 14px; padding: 1rem;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  background: var(--color-surface); border-radius: var(--radius-lg); padding: 1rem;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s var(--ease-default);
 }
+.record-card:hover { box-shadow: var(--shadow-md); }
 .record-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.35rem; }
-.record-date { color: #667eea; font-weight: 600; font-size: 0.95rem; }
-.record-poop-type { color: #4c1d95; font-size: 0.9rem; font-weight: 600; margin-top: 0.15rem; }
-.record-category { color: #6b7280; font-weight: 500; }
-.record-duration { color: #6b7280; font-weight: 500; }
-.record-status { color: #374151; font-size: 0.85rem; margin-top: 0.3rem; }
-.record-notes { color: #374151; font-size: 0.9rem; margin-top: 0.3rem; }
-.record-device { color: #9ca3af; font-size: 0.75rem; margin-top: 0.3rem; }
+.record-date { color: var(--color-primary); font-weight: 600; font-size: 0.95rem; }
+.record-poop-type { color: var(--color-primary-dark); font-size: 0.9rem; font-weight: 600; margin-top: 0.15rem; }
+.record-category { color: var(--color-text-3); font-weight: 500; }
+.record-duration { color: var(--color-text-3); font-weight: 500; }
+.record-status { color: var(--color-text-2); font-size: 0.85rem; margin-top: 0.3rem; }
+.record-notes { color: var(--color-text-2); font-size: 0.9rem; margin-top: 0.3rem; }
+.record-device { color: var(--color-text-4); font-size: 0.75rem; margin-top: 0.3rem; }
 
 .delete-btn {
-  background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;
-  padding: 0.35rem 0.6rem; border-radius: 8px; font-size: 0.8rem;
+  background: var(--color-danger-soft); color: var(--color-danger-dark); border: 1px solid var(--color-danger-soft);
+  padding: 0.35rem 0.6rem; border-radius: var(--radius-sm); font-size: 0.8rem;
   font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: background-color 0.15s var(--ease-default), transform 0.1s ease;
 }
-.delete-btn:active { background: #fee2e2; transform: scale(0.97); }
+.delete-btn:focus-visible { outline: 2px solid var(--color-danger); outline-offset: 2px; }
+.delete-btn:hover { background: #fecaca; }
+.delete-btn:active { background: var(--color-danger-soft); transform: scale(0.97); }
 
 @media (max-width: 600px) {
   .filter-grid { grid-template-columns: 1fr 1fr; }
@@ -306,5 +315,39 @@ onMounted(async () => {
 }
 @media (max-width: 420px) {
   .filter-grid { grid-template-columns: 1fr; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .filter-card, .records-section, .empty-state, .record-card, .loading {
+    background: var(--color-surface);
+  }
+  .page-title, .stat-value, .section-title, .modal-title {
+    color: var(--color-text);
+  }
+  .field, .record-status, .record-notes, .record-device {
+    color: var(--color-text-2);
+  }
+  .record-category, .record-duration {
+    color: var(--color-text-3);
+  }
+  .btn-outline {
+    background: var(--color-surface-2);
+    border-color: var(--color-border);
+    color: var(--color-primary);
+  }
+  .input {
+    background: var(--color-surface-2);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+  .error-message {
+    background: var(--color-danger-soft);
+    color: var(--color-danger-dark);
+  }
+  .delete-btn {
+    background: var(--color-danger-soft);
+    border-color: var(--color-danger-soft);
+  }
+  .spinner { border-color: var(--color-border); border-top-color: var(--color-primary); }
 }
 </style>

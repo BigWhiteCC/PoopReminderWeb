@@ -24,61 +24,79 @@
       </div>
     </div>
 
-    <!-- 用户列表 -->
-    <section class="panel">
-      <h2 class="panel-title">👥 用户列表</h2>
-      <div v-if="users.length === 0" class="empty-hint">暂无用户</div>
-      <div class="user-grid">
-        <div
-          v-for="u in users"
-          :key="u.id"
-          class="user-card"
-          :class="{ 'user-card--active': selectedUserId === u.id, 'user-card--admin': u.role === 'admin' }"
-          @click="selectUser(u.id)"
-        >
-          <div class="user-card__header">
-            <span class="user-card__name">{{ u.username }}</span>
-            <span v-if="u.role === 'admin'" class="user-card__badge admin-badge">管理员</span>
+    <!-- 标签页切换 -->
+    <div class="tabs" role="tablist" aria-label="管理员面板">
+      <button type="button" role="tab" :aria-selected="activeTab === 'users'" :tabindex="activeTab === 'users' ? 0 : -1" class="tab-btn" :class="{ active: activeTab === 'users' }" @click="activeTab = 'users'">👥 用户管理</button>
+      <button type="button" role="tab" :aria-selected="activeTab === 'loginLogs'" :tabindex="activeTab === 'loginLogs' ? 0 : -1" class="tab-btn" :class="{ active: activeTab === 'loginLogs' }" @click="switchToLoginLogs">📝 登录日志</button>
+      <button type="button" role="tab" :aria-selected="activeTab === 'auditLogs'" :tabindex="activeTab === 'auditLogs' ? 0 : -1" class="tab-btn" :class="{ active: activeTab === 'auditLogs' }" @click="switchToAuditLogs">🔍 审计日志</button>
+    </div>
+
+    <!-- 用户管理 -->
+    <div v-show="activeTab === 'users'">
+      <!-- 用户列表 -->
+      <section class="panel">
+        <h2 class="panel-title">👥 用户列表</h2>
+        <div v-if="users.length === 0" class="empty-hint">暂无用户</div>
+        <div class="user-grid">
+          <div
+            v-for="u in users"
+            :key="u.id"
+            class="user-card"
+            :class="{ 'user-card--active': selectedUserId === u.id, 'user-card--admin': u.role === 'admin', 'user-card--disabled': u.enabled === 0 }"
+            @click="selectUser(u.id)"
+          >
+            <div class="user-card__header">
+              <span class="user-card__name">{{ u.username }}</span>
+              <span v-if="u.role === 'admin'" class="user-card__badge admin-badge">管理员</span>
+              <span v-else-if="u.enabled === 0" class="user-card__badge disabled-badge">已禁用</span>
+            </div>
+            <div class="user-card__email">{{ u.email }}</div>
+            <div class="user-card__meta">
+              <span>📋 {{ u.record_count }} 条记录</span>
+              <span>📅 {{ formatDate(u.created_at) }}</span>
+            </div>
+            <div class="user-card__actions">
+              <button class="btn btn--small btn--reset" @click.stop="openResetPassword(u)">重置密码</button>
+              <button v-if="u.role !== 'admin'" class="btn btn--small" :class="u.enabled ? 'btn--warning' : 'btn--success'" @click.stop="toggleUser(u)">
+                {{ u.enabled ? '禁用' : '启用' }}
+              </button>
+              <button v-if="u.role !== 'admin'" class="btn btn--small btn--danger" @click.stop="confirmDeleteUser(u)">删除</button>
+            </div>
           </div>
-          <div class="user-card__email">{{ u.email }}</div>
-          <div class="user-card__meta">
-            <span>📋 {{ u.record_count }} 条记录</span>
-            <span>📅 {{ formatDate(u.created_at) }}</span>
-          </div>
-          <button class="btn btn--small btn--reset" @click.stop="openResetPassword(u)">重置密码</button>
-          <button v-if="u.role !== 'admin'" class="btn btn--small btn--danger" @click.stop="confirmDeleteUser(u)">删除</button>
         </div>
-      </div>
-      <div class="filter-row">
-        <button
-          class="btn btn--secondary"
-          :class="{ 'btn--active': selectedUserId === null }"
-          @click="selectUser(null)"
-        >
-          显示全部用户记录
-        </button>
-      </div>
-    </section>
+        <div class="filter-row">
+          <button
+            class="btn btn--secondary"
+            :class="{ 'btn--active': selectedUserId === null }"
+            @click="selectUser(null)"
+          >
+            显示全部用户记录
+          </button>
+        </div>
+      </section>
 
     <!-- 重置密码弹窗 -->
     <div v-if="resetPasswordUser" class="modal-overlay" @click="closeResetPassword">
-      <div class="modal-content" @click.stop>
-        <h3 class="modal-title">🔐 重置密码</h3>
+      <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="reset-pwd-title" @click.stop>
+        <h3 id="reset-pwd-title" class="modal-title">🔐 重置密码</h3>
         <p class="modal-subtitle">为用户 <strong>{{ resetPasswordUser.username }}</strong> 设置新密码</p>
         <div class="modal-field">
-          <label>新密码（至少6位）</label>
+          <label for="reset-pwd-input">新密码（至少6位）</label>
           <input
+            id="reset-pwd-input"
             type="password"
             v-model="resetPasswordValue"
             placeholder="请输入新密码"
             class="input"
+            autocomplete="new-password"
+            spellcheck="false"
           />
         </div>
-        <div v-if="resetPasswordError" class="modal-error">{{ resetPasswordError }}</div>
-        <div v-if="resetPasswordSuccess" class="modal-success">{{ resetPasswordSuccess }}</div>
+        <div v-if="resetPasswordError" class="modal-error" role="alert">{{ resetPasswordError }}</div>
+        <div v-if="resetPasswordSuccess" class="modal-success" role="status">{{ resetPasswordSuccess }}</div>
         <div class="modal-actions">
-          <button class="btn btn--secondary" @click="closeResetPassword">取消</button>
-          <button class="btn btn--primary" @click="handleResetPassword" :disabled="resetPasswordSaving">
+          <button type="button" class="btn btn--secondary" @click="closeResetPassword">取消</button>
+          <button type="button" class="btn btn--primary" @click="handleResetPassword" :disabled="resetPasswordSaving">
             {{ resetPasswordSaving ? '重置中...' : '确认重置' }}
           </button>
         </div>
@@ -87,16 +105,16 @@
 
     <!-- 删除用户确认弹窗 -->
     <div v-if="deleteUserTarget" class="modal-overlay" @click="cancelDeleteUser">
-      <div class="modal-content" @click.stop>
-        <h3 class="modal-title">⚠️ 删除用户</h3>
+      <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="delete-user-title" @click.stop>
+        <h3 id="delete-user-title" class="modal-title">⚠️ 删除用户</h3>
         <p class="modal-subtitle">
           确定要删除用户 <strong>{{ deleteUserTarget.username }}</strong> 吗？<br>
           该操作将同时删除该用户的所有记录，且不可恢复！
         </p>
-        <div v-if="deleteUserError" class="modal-error">{{ deleteUserError }}</div>
+        <div v-if="deleteUserError" class="modal-error" role="alert">{{ deleteUserError }}</div>
         <div class="modal-actions">
-          <button class="btn btn--secondary" @click="cancelDeleteUser">取消</button>
-          <button class="btn btn--danger" @click="handleDeleteUser" :disabled="deleteUserSaving">
+          <button type="button" class="btn btn--secondary" @click="cancelDeleteUser">取消</button>
+          <button type="button" class="btn btn--danger" @click="handleDeleteUser" :disabled="deleteUserSaving">
             {{ deleteUserSaving ? '删除中...' : '确认删除' }}
           </button>
         </div>
@@ -107,17 +125,17 @@
     <section class="panel">
       <h2 class="panel-title">🔍 筛选记录</h2>
       <div class="filter-grid">
-        <label class="field">
+        <label class="field" for="filter-start">
           <span>开始日期</span>
-          <input type="date" v-model="filter.start" class="input" />
+          <input id="filter-start" type="date" v-model="filter.start" class="input" />
         </label>
-        <label class="field">
+        <label class="field" for="filter-end">
           <span>结束日期</span>
-          <input type="date" v-model="filter.end" class="input" />
+          <input id="filter-end" type="date" v-model="filter.end" class="input" />
         </label>
-        <label class="field">
+        <label class="field" for="filter-type">
           <span>大便类型</span>
-          <select v-model="filter.poop_type" class="input">
+          <select id="filter-type" v-model="filter.poop_type" class="input">
             <option value="">全部</option>
             <option v-for="pt in poopTypes" :key="pt.id" :value="pt.id">
               {{ pt.emoji }} {{ pt.name }}
@@ -125,8 +143,8 @@
           </select>
         </label>
         <div class="filter-actions">
-          <button class="btn btn--primary" @click="loadRecords">查询</button>
-          <button class="btn btn--secondary" @click="resetFilter">重置</button>
+          <button type="button" class="btn btn--primary" @click="loadRecords">查询</button>
+          <button type="button" class="btn btn--secondary" @click="resetFilter">重置</button>
         </div>
       </div>
     </section>
@@ -201,12 +219,141 @@
         </div>
       </div>
     </section>
+    </div>
+
+    <!-- 登录日志 -->
+    <div v-show="activeTab === 'loginLogs'" class="panel">
+      <h2 class="panel-title">📝 登录日志</h2>
+      <div class="filter-grid">
+        <label class="field" for="log-start">
+          <span>开始日期</span>
+          <input id="log-start" type="date" v-model="loginLogFilter.start" class="input" />
+        </label>
+        <label class="field" for="log-end">
+          <span>结束日期</span>
+          <input id="log-end" type="date" v-model="loginLogFilter.end" class="input" />
+        </label>
+        <label class="field" for="log-user">
+          <span>用户</span>
+          <select id="log-user" v-model="loginLogFilter.user_id" class="input">
+            <option value="">全部</option>
+            <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }}</option>
+          </select>
+        </label>
+        <label class="field" for="log-success">
+          <span>结果</span>
+          <select id="log-success" v-model="loginLogFilter.success" class="input">
+            <option value="">全部</option>
+            <option value="1">成功</option>
+            <option value="0">失败</option>
+          </select>
+        </label>
+        <div class="filter-actions">
+          <button type="button" class="btn btn--primary" @click="loadLoginLogs">查询</button>
+          <button type="button" class="btn btn--secondary" @click="resetLoginLogFilter">重置</button>
+        </div>
+      </div>
+      <div v-if="loginLogs.length === 0" class="empty-hint">暂无登录日志</div>
+      <div v-else class="logs-list">
+        <div v-for="log in loginLogs" :key="log.id" class="log-item" :class="{ 'log-item--failed': !log.success }">
+          <div class="log-item__icon">{{ log.success ? '✅' : '❌' }}</div>
+          <div class="log-item__info">
+            <div class="log-item__user">
+              <span class="log-item__username">{{ log.username || '未知用户' }}</span>
+              <span class="log-item__email">{{ log.email || '-' }}</span>
+            </div>
+            <div class="log-item__detail">
+              {{ log.deviceType }} · {{ log.deviceBrowser }} · {{ log.deviceOs }}
+              <span v-if="log.deviceModel"> · {{ log.deviceModel }}</span>
+              <span v-if="log.ip"> · IP: {{ log.ip }}</span>
+            </div>
+            <div v-if="log.failReason" class="log-item__fail">失败原因: {{ log.failReason }}</div>
+          </div>
+          <div class="log-item__time">{{ formatDateTime(log.createdAt) }}</div>
+        </div>
+      </div>
+      <div v-if="loginLogPage.total > loginLogPage.limit" class="pagination">
+        <button class="btn btn--secondary" :disabled="loginLogPage.offset === 0" @click="changeLoginLogPage(-1)">← 上一页</button>
+        <span class="pagination-info">{{ loginLogPage.offset + 1 }} - {{ Math.min(loginLogPage.offset + loginLogPage.limit, loginLogPage.total) }} / {{ loginLogPage.total }}</span>
+        <button class="btn btn--secondary" :disabled="loginLogPage.offset + loginLogPage.limit >= loginLogPage.total" @click="changeLoginLogPage(1)">下一页 →</button>
+      </div>
+    </div>
+
+    <!-- 审计日志 -->
+    <div v-show="activeTab === 'auditLogs'" class="panel">
+      <h2 class="panel-title">🔍 审计日志</h2>
+      <div class="filter-grid">
+        <label class="field" for="audit-start">
+          <span>开始日期</span>
+          <input id="audit-start" type="date" v-model="auditLogFilter.start" class="input" />
+        </label>
+        <label class="field" for="audit-end">
+          <span>结束日期</span>
+          <input id="audit-end" type="date" v-model="auditLogFilter.end" class="input" />
+        </label>
+        <label class="field" for="audit-action">
+          <span>操作类型</span>
+          <select id="audit-action" v-model="auditLogFilter.action" class="input">
+            <option value="">全部</option>
+            <option value="RESET_PASSWORD">重置密码</option>
+            <option value="DELETE_USER">删除用户</option>
+            <option value="ENABLE_USER">启用用户</option>
+            <option value="DISABLE_USER">禁用用户</option>
+            <option value="DELETE_RECORD">删除记录</option>
+          </select>
+        </label>
+        <label class="field" for="audit-target">
+          <span>目标类型</span>
+          <select id="audit-target" v-model="auditLogFilter.target_type" class="input">
+            <option value="">全部</option>
+            <option value="user">用户</option>
+            <option value="record">记录</option>
+          </select>
+        </label>
+        <div class="filter-actions">
+          <button type="button" class="btn btn--primary" @click="loadAuditLogs">查询</button>
+          <button type="button" class="btn btn--secondary" @click="resetAuditLogFilter">重置</button>
+        </div>
+      </div>
+      <div v-if="auditLogs.length === 0" class="empty-hint">暂无审计日志</div>
+      <div v-else class="logs-list">
+        <div v-for="log in auditLogs" :key="log.id" class="log-item audit-log-item">
+          <div class="log-item__icon">🔔</div>
+          <div class="log-item__info">
+            <div class="log-item__user">
+              <span class="log-item__username">{{ log.adminUsername }}</span>
+              <span class="log-item__action">{{ getActionLabel(log.action) }}</span>
+            </div>
+            <div class="log-item__detail" v-if="log.detail">{{ log.detail }}</div>
+          </div>
+          <div class="log-item__time">{{ formatDateTime(log.createdAt) }}</div>
+        </div>
+      </div>
+      <div v-if="auditLogPage.total > auditLogPage.limit" class="pagination">
+        <button class="btn btn--secondary" :disabled="auditLogPage.offset === 0" @click="changeAuditLogPage(-1)">← 上一页</button>
+        <span class="pagination-info">{{ auditLogPage.offset + 1 }} - {{ Math.min(auditLogPage.offset + auditLogPage.limit, auditLogPage.total) }} / {{ auditLogPage.total }}</span>
+        <button class="btn btn--secondary" :disabled="auditLogPage.offset + auditLogPage.limit >= auditLogPage.total" @click="changeAuditLogPage(1)">下一页 →</button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api, formatDuration } from '../services/api.js'
+
+const route = useRoute()
+const router = useRouter()
+
+const VALID_TABS = ['users', 'loginLogs', 'auditLogs']
+const activeTab = ref(route.query.tab && VALID_TABS.includes(route.query.tab) ? route.query.tab : 'users')
+
+function syncTabToUrl(tab) {
+  router.replace({ query: { ...route.query, tab } }).catch(() => {})
+}
+
+watch(activeTab, syncTabToUrl)
 
 const POOP_TYPES = [
   { id: 1, name: '第1型', emoji: '🫘', description: '一颗颗硬球（很难排出）' },
@@ -230,6 +377,16 @@ const recordsPage = reactive({
   page: { limit: 50, offset: 0, total: 0 }
 })
 const filter = reactive({ start: '', end: '', poop_type: '' })
+
+// 登录日志
+const loginLogs = ref([])
+const loginLogFilter = reactive({ start: '', end: '', user_id: '', success: '' })
+const loginLogPage = reactive({ limit: 50, offset: 0, total: 0 })
+
+// 审计日志
+const auditLogs = ref([])
+const auditLogFilter = reactive({ start: '', end: '', action: '', target_type: '' })
+const auditLogPage = reactive({ limit: 50, offset: 0, total: 0 })
 
 // 重置密码相关
 const resetPasswordUser = ref(null)
@@ -406,6 +563,103 @@ async function handleDeleteUser() {
   }
 }
 
+// 启用/禁用用户
+async function toggleUser(user) {
+  try {
+    const result = await api.adminToggleUser(user.id)
+    // 更新用户列表中的状态
+    const idx = users.value.findIndex(u => u.id === user.id)
+    if (idx !== -1) {
+      users.value[idx].enabled = result.enabled
+    }
+  } catch (e) {
+    errorMessage.value = e.message || '操作失败'
+  }
+}
+
+// 登录日志
+async function loadLoginLogs() {
+  try {
+    const params = { limit: loginLogPage.limit, offset: loginLogPage.offset }
+    if (loginLogFilter.user_id) params.user_id = loginLogFilter.user_id
+    if (loginLogFilter.success !== '') params.success = loginLogFilter.success
+    if (loginLogFilter.start) params.start = loginLogFilter.start
+    if (loginLogFilter.end) params.end = loginLogFilter.end
+    const data = await api.adminGetLoginLogs(params)
+    loginLogs.value = data.logs || []
+    if (data.page) loginLogPage.total = data.page.total
+  } catch (e) {
+    errorMessage.value = e.message || '加载登录日志失败'
+  }
+}
+
+function resetLoginLogFilter() {
+  loginLogFilter.start = ''
+  loginLogFilter.end = ''
+  loginLogFilter.user_id = ''
+  loginLogFilter.success = ''
+  loginLogPage.offset = 0
+  loadLoginLogs()
+}
+
+function changeLoginLogPage(dir) {
+  loginLogPage.offset += dir * loginLogPage.limit
+  if (loginLogPage.offset < 0) loginLogPage.offset = 0
+  loadLoginLogs()
+}
+
+function switchToLoginLogs() {
+  activeTab.value = 'loginLogs'
+  if (loginLogs.value.length === 0) loadLoginLogs()
+}
+
+// 审计日志
+async function loadAuditLogs() {
+  try {
+    const params = { limit: auditLogPage.limit, offset: auditLogPage.offset }
+    if (auditLogFilter.action) params.action = auditLogFilter.action
+    if (auditLogFilter.target_type) params.target_type = auditLogFilter.target_type
+    if (auditLogFilter.start) params.start = auditLogFilter.start
+    if (auditLogFilter.end) params.end = auditLogFilter.end
+    const data = await api.adminGetAuditLogs(params)
+    auditLogs.value = data.logs || []
+    if (data.page) auditLogPage.total = data.page.total
+  } catch (e) {
+    errorMessage.value = e.message || '加载审计日志失败'
+  }
+}
+
+function resetAuditLogFilter() {
+  auditLogFilter.start = ''
+  auditLogFilter.end = ''
+  auditLogFilter.action = ''
+  auditLogFilter.target_type = ''
+  auditLogPage.offset = 0
+  loadAuditLogs()
+}
+
+function changeAuditLogPage(dir) {
+  auditLogPage.offset += dir * auditLogPage.limit
+  if (auditLogPage.offset < 0) auditLogPage.offset = 0
+  loadAuditLogs()
+}
+
+function switchToAuditLogs() {
+  activeTab.value = 'auditLogs'
+  if (auditLogs.value.length === 0) loadAuditLogs()
+}
+
+function getActionLabel(action) {
+  const labels = {
+    RESET_PASSWORD: '重置密码',
+    DELETE_USER: '删除用户',
+    ENABLE_USER: '启用用户',
+    DISABLE_USER: '禁用用户',
+    DELETE_RECORD: '删除记录'
+  }
+  return labels[action] || action
+}
+
 onMounted(async () => {
   await Promise.all([loadUsers(), loadStats()])
   await loadRecords()
@@ -423,12 +677,47 @@ onMounted(async () => {
   font-size: 28px;
   margin-bottom: 24px;
   text-align: center;
-  color: #2d3748;
+  color: var(--color-text);
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  background: var(--color-surface);
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.tab-btn {
+  padding: 8px 16px;
+  border: none;
+  background: var(--color-surface-2);
+  color: var(--color-text-2);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease-default), transform 0.1s ease;
+}
+
+.tab-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.tab-btn.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.tab-btn:hover:not(.active) {
+  background: var(--color-border);
 }
 
 .panel {
-  background: #fff;
-  border-radius: 12px;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
   padding: 24px;
   margin-bottom: 20px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
@@ -437,13 +726,13 @@ onMounted(async () => {
 .panel-title {
   font-size: 18px;
   margin: 0 0 20px 0;
-  color: #2d3748;
+  color: var(--color-text);
 }
 
 .panel-subtitle {
   font-size: 13px;
   font-weight: normal;
-  color: #718096;
+  color: var(--color-text-3);
   margin-left: 8px;
 }
 
@@ -455,13 +744,13 @@ onMounted(async () => {
 }
 
 .summary-card {
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 20px;
   color: white;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-.gradient-1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.gradient-1 { background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%); }
 .gradient-2 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
 .gradient-3 { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
 .gradient-4 { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
@@ -479,32 +768,36 @@ onMounted(async () => {
 
 .user-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
   margin-bottom: 20px;
 }
 
 .user-card {
   padding: 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   border: 2px solid transparent;
-  background: #f7fafc;
+  background: var(--color-surface-2);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.15s var(--ease-default), transform 0.1s ease;
 }
 
 .user-card:hover {
-  background: #edf2f7;
+  background: var(--color-border);
   transform: translateY(-2px);
 }
 
 .user-card--active {
-  border-color: #667eea;
-  background: #ebf4ff;
+  border-color: var(--color-primary);
+  background: var(--color-surface-2);
 }
 
 .user-card--admin {
   background: linear-gradient(135deg, #fffbeb 0%, #fff5f5 100%);
+}
+
+.user-card--disabled {
+  opacity: 0.6;
 }
 
 .user-card__header {
@@ -512,25 +805,35 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
+  gap: 8px;
 }
 
 .user-card__name {
   font-size: 16px;
   font-weight: 600;
-  color: #2d3748;
+  color: var(--color-text);
 }
 
 .user-card__badge {
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: #f56565;
+  background: var(--color-danger);
   color: white;
+  flex-shrink: 0;
+}
+
+.user-card__badge.admin-badge {
+  background: var(--color-warning);
+}
+
+.user-card__badge.disabled-badge {
+  background: var(--color-text-3);
 }
 
 .user-card__email {
   font-size: 12px;
-  color: #718096;
+  color: var(--color-text-3);
   margin-bottom: 8px;
 }
 
@@ -538,7 +841,34 @@ onMounted(async () => {
   display: flex;
   gap: 12px;
   font-size: 11px;
-  color: #a0aec0;
+  color: var(--color-text-4);
+  margin-bottom: 8px;
+}
+
+.user-card__actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.user-card__actions .btn {
+  min-width: 80px;
+  flex: 1;
+  height: 34px;
+  line-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  margin: 0;
+  border-radius: var(--radius-sm);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-card__actions .btn:only-child {
+  flex: none;
 }
 
 .filter-row {
@@ -559,22 +889,34 @@ onMounted(async () => {
 
 .field span {
   font-size: 13px;
-  color: #4a5568;
+  color: var(--color-text-2);
   font-weight: 500;
 }
 
 .input {
-  padding: 8px 12px;
-  border: 1px solid #cbd5e0;
-  border-radius: 6px;
+  height: 38px;
+  line-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-2);
+  border-radius: var(--radius-sm);
   font-size: 14px;
-  background: white;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-sizing: border-box;
+}
+
+select.input {
+  line-height: normal;
+}
+
+input[type="date"].input {
+  line-height: normal;
 }
 
 .input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102,126,234,0.2);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
 }
 
 .filter-actions {
@@ -584,31 +926,37 @@ onMounted(async () => {
 }
 
 .btn {
-  padding: 8px 16px;
-  border-radius: 6px;
+  padding: 0 16px;
+  height: 38px;
+  line-height: 38px;
+  border-radius: var(--radius-sm);
   border: none;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.15s var(--ease-default), transform 0.1s ease;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn--primary {
-  background: #667eea;
+  background: var(--color-primary);
   color: white;
 }
 
 .btn--primary:hover {
-  background: #5a67d8;
+  background: var(--color-primary-dark);
 }
 
 .btn--secondary {
-  background: #e2e8f0;
-  color: #4a5568;
+  background: var(--color-border);
+  color: var(--color-text-2);
 }
 
 .btn--secondary:hover {
-  background: #cbd5e0;
+  background: var(--color-border-2);
 }
 
 .btn--secondary:disabled {
@@ -617,21 +965,23 @@ onMounted(async () => {
 }
 
 .btn--danger {
-  background: #f56565;
+  background: var(--color-danger);
   color: white;
 }
 
 .btn--danger:hover {
-  background: #e53e3e;
+  background: var(--color-danger-dark);
 }
 
 .btn--small {
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 0 12px;
+  height: 34px;
+  line-height: 34px;
+  font-size: 13px;
 }
 
 .btn--active {
-  background: #667eea;
+  background: var(--color-primary);
   color: white;
 }
 
@@ -646,9 +996,9 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: flex-start;
   padding: 16px;
-  border-radius: 10px;
-  background: #f7fafc;
-  border-left: 4px solid #667eea;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  border-left: 4px solid var(--color-primary);
 }
 
 .record-item__left {
@@ -677,17 +1027,17 @@ onMounted(async () => {
 .record-item__username {
   font-size: 15px;
   font-weight: 600;
-  color: #2d3748;
+  color: var(--color-text);
 }
 
 .record-item__email {
   font-size: 12px;
-  color: #a0aec0;
+  color: var(--color-text-4);
 }
 
 .record-item__date {
   font-size: 13px;
-  color: #4a5568;
+  color: var(--color-text-2);
   margin-bottom: 6px;
 }
 
@@ -695,7 +1045,7 @@ onMounted(async () => {
 .record-item__duration,
 .record-item__notes {
   font-size: 12px;
-  color: #718096;
+  color: var(--color-text-3);
   margin-top: 3px;
 }
 
@@ -745,7 +1095,7 @@ onMounted(async () => {
 
 .trend-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #667eea, #764ba2);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-deep));
   border-radius: 4px;
   transition: width 0.3s;
 }
@@ -896,5 +1246,106 @@ onMounted(async () => {
     width: 80px;
     font-size: 11px;
   }
+  .tabs {
+    flex-wrap: wrap;
+  }
+}
+
+/* 日志列表 */
+.logs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.log-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--color-surface-2);
+  border-left: 4px solid var(--color-primary);
+}
+
+.log-item--failed {
+  background: #fff5f5;
+  border-left-color: #f56565;
+}
+
+.log-item__icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.log-item__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.log-item__user {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.log-item__username {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.log-item__email {
+  font-size: 12px;
+  color: #a0aec0;
+}
+
+.log-item__action {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #edf2f7;
+  color: #4a5568;
+}
+
+.log-item__detail {
+  font-size: 12px;
+  color: #718096;
+  word-break: break-all;
+}
+
+.log-item__fail {
+  font-size: 12px;
+  color: #c53030;
+  margin-top: 4px;
+}
+
+.log-item__time {
+  font-size: 12px;
+  color: #a0aec0;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* 按钮颜色 */
+.btn--warning {
+  background: #ed8936;
+  color: white;
+}
+
+.btn--warning:hover {
+  background: #dd6b20;
+}
+
+.btn--success {
+  background: #48bb78;
+  color: white;
+}
+
+.btn--success:hover {
+  background: #38a169;
 }
 </style>

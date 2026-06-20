@@ -102,11 +102,11 @@ export const api = {
   },
 
   async getHomeData() {
-    return request(`${API_BASE}/home`)
+    return request(`${API_BASE}/record/home`)
   },
 
   async getHistory() {
-    return request(`${API_BASE}/history`)
+    return request(`${API_BASE}/record/history`)
   },
 
   async getSettings() {
@@ -141,7 +141,7 @@ export const api = {
   },
 
   async deleteRecord(id) {
-    return request(`${API_BASE}/delete/${id}`, { method: 'DELETE' })
+    return request(`${API_BASE}/record/${id}`, { method: 'DELETE' })
   },
 
   async getRecords({ start, end, poop_type } = {}) {
@@ -150,7 +150,7 @@ export const api = {
     if (end) params.append('end', end)
     if (poop_type) params.append('poop_type', String(poop_type))
     const qs = params.toString()
-    return request(`${API_BASE}/records${qs ? `?${qs}` : ''}`)
+    return request(`${API_BASE}/record/list${qs ? `?${qs}` : ''}`)
   },
 
   async getWeekly({ date, poop_type } = {}) {
@@ -158,7 +158,7 @@ export const api = {
     if (date) params.append('date', date)
     if (poop_type) params.append('poop_type', String(poop_type))
     const qs = params.toString()
-    return request(`${API_BASE}/weekly${qs ? `?${qs}` : ''}`)
+    return request(`${API_BASE}/record/weekly${qs ? `?${qs}` : ''}`)
   },
 
   async getMonthly({ date, poop_type } = {}) {
@@ -166,7 +166,7 @@ export const api = {
     if (date) params.append('date', date)
     if (poop_type) params.append('poop_type', String(poop_type))
     const qs = params.toString()
-    return request(`${API_BASE}/monthly${qs ? `?${qs}` : ''}`)
+    return request(`${API_BASE}/record/monthly${qs ? `?${qs}` : ''}`)
   },
 
   // 导出：直接返回 Blob 下载（绕过通用 request，因为响应不是 JSON）
@@ -179,7 +179,7 @@ export const api = {
     if (end) params.append('end', end)
     if (poop_type) params.append('poop_type', String(poop_type))
 
-    const url = `${API_BASE}/export?${params.toString()}`
+    const url = `${API_BASE}/record/export?${params.toString()}`
     const res = await fetch(url, {
       headers: token ? { 'Authorization': `Bearer ${token}` } : {}
     })
@@ -322,6 +322,37 @@ export const api = {
   // 管理员删除用户
   async adminDeleteUser(userId) {
     return request(`${API_BASE}/admin/user/${userId}`, { method: 'DELETE' })
+  },
+
+  // 管理员启用/禁用用户
+  async adminToggleUser(userId) {
+    return request(`${API_BASE}/admin/user/${userId}/toggle`, { method: 'POST' })
+  },
+
+  // 获取登录日志
+  async adminGetLoginLogs({ user_id, success, start, end, limit, offset } = {}) {
+    const params = new URLSearchParams()
+    if (user_id) params.append('user_id', user_id)
+    if (success !== undefined) params.append('success', String(success))
+    if (start) params.append('start', start)
+    if (end) params.append('end', end)
+    if (limit !== undefined) params.append('limit', String(limit))
+    if (offset !== undefined) params.append('offset', String(offset))
+    const qs = params.toString()
+    return request(`${API_BASE}/admin/login-logs${qs ? `?${qs}` : ''}`)
+  },
+
+  // 获取审计日志
+  async adminGetAuditLogs({ action, target_type, start, end, limit, offset } = {}) {
+    const params = new URLSearchParams()
+    if (action) params.append('action', action)
+    if (target_type) params.append('target_type', target_type)
+    if (start) params.append('start', start)
+    if (end) params.append('end', end)
+    if (limit !== undefined) params.append('limit', String(limit))
+    if (offset !== undefined) params.append('offset', String(offset))
+    const qs = params.toString()
+    return request(`${API_BASE}/admin/audit-logs${qs ? `?${qs}` : ''}`)
   },
 
   // 用户修改自己的密码

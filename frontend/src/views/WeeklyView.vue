@@ -37,37 +37,40 @@
     <!-- 柱状图：每日次数（点击查看当日详情） -->
     <div class="chart-section" v-if="days.length">
       <div class="chart-title">💩 本周每日次数</div>
-      <div class="bar-chart">
+      <div class="bar-chart" role="group" aria-label="每日排便次数柱状图">
         <button
           v-for="day in days"
           :key="day.date"
+          type="button"
           class="bar-column"
           :class="{ 'is-today': day.date === todayKey, 'has-record': day.count > 0 }"
+          :disabled="day.count === 0"
+          :aria-label="`${day.weekday} ${day.date}，${day.count} 次记录`"
           @click="openDayDetail(day)"
         >
-          <div class="bar-count-top" v-if="day.count > 0">{{ day.count }}</div>
-          <div class="bar-track">
-            <div
+          <span class="bar-count-top" v-if="day.count > 0">{{ day.count }}</span>
+          <span class="bar-track">
+            <span
               class="bar-fill"
               :style="{ height: barHeight(day.count) + '%' }"
-            ></div>
-          </div>
-          <div class="bar-labels">
-            <div class="bar-weekday">{{ day.weekday }}</div>
-            <div class="bar-date">{{ day.date.slice(5) }}</div>
-            <div class="bar-avg" v-if="day.count > 0">{{ formatDurationShort(day.avgDuration) }}</div>
-            <div class="bar-avg bar-avg-zero" v-else>-</div>
-          </div>
+            ></span>
+          </span>
+          <span class="bar-labels">
+            <span class="bar-weekday">{{ day.weekday }}</span>
+            <span class="bar-date">{{ day.date.slice(5) }}</span>
+            <span class="bar-avg" v-if="day.count > 0">{{ formatDurationShort(day.avgDuration) }}</span>
+            <span class="bar-avg bar-avg-zero" v-else>-</span>
+          </span>
         </button>
       </div>
     </div>
 
     <!-- 当日详情弹窗 -->
-    <div v-if="activeDay" class="modal-overlay" @click.self="activeDay = null">
-      <div class="modal-card">
+    <div v-if="activeDay" class="modal-overlay" @click.self="activeDay = null" @keydown.esc="activeDay = null">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="weekly-modal-title" tabindex="-1">
         <div class="modal-header">
-          <h3 class="modal-title">{{ activeDay.weekday }} · {{ activeDay.date }}</h3>
-          <button class="modal-close" @click="activeDay = null" aria-label="关闭">✕</button>
+          <h3 id="weekly-modal-title" class="modal-title">{{ activeDay.weekday }} · {{ activeDay.date }}</h3>
+          <button type="button" class="modal-close" @click="activeDay = null" aria-label="关闭">✕</button>
         </div>
 
         <div class="modal-summary" v-if="activeDay.count > 0">
@@ -153,11 +156,31 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api, ApiError, formatDuration, formatDurationShort } from '../services/api'
 
+const route = useRoute()
+const router = useRouter()
+
+function parseWeekFromUrl() {
+  const w = route.query.week
+  if (typeof w === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(w)) {
+    const [y, m, d] = w.split('-').map(Number)
+    return getMonday(new Date(y, m - 1, d))
+  }
+  return getMonday(new Date())
+}
+
 const poopTypes = ref([])
-const weekStart = ref(getMonday(new Date()))
+const weekStart = ref(parseWeekFromUrl())
+
+watch(weekStart, (val) => {
+  const y = val.getFullYear()
+  const m = String(val.getMonth() + 1).padStart(2, '0')
+  const d = String(val.getDate()).padStart(2, '0')
+  router.replace({ query: { ...route.query, week: `${y}-${m}-${d}` } }).catch(() => {})
+})
 const days = ref([])
 const summary = ref({ totalCount: 0, avgDuration: 0, avgPerDay: 0 })
 const records = ref([])
@@ -390,30 +413,32 @@ onMounted(async () => {
 .weekly-view { animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-.page-title { font-size: 1.5rem; color: #1f2937; margin-bottom: 1rem; text-align: center; font-weight: 700; }
+.page-title { font-size: 1.5rem; color: var(--color-text); margin-bottom: 1rem; text-align: center; font-weight: 700; }
 
 .week-nav {
   display: flex; flex-wrap: nowrap; align-items: center;
-  background: white; padding: 0.75rem 1rem; border-radius: 14px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 1rem; gap: 0.5rem;
+  background: var(--color-surface); padding: 0.75rem 1rem; border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm); margin-bottom: 1rem; gap: 0.5rem;
 }
 .arrow-btn {
   display: inline-flex; align-items: center; justify-content: center;
   flex: 0 0 auto; min-width: 44px;
-  padding: 0.55rem 0.75rem; border: 1px solid #e5e7eb; background: white;
-  border-radius: 10px; font-size: 0.9rem; color: #374151; cursor: pointer;
+  padding: 0.55rem 0.75rem; border: 1px solid var(--color-border); background: var(--color-surface);
+  border-radius: var(--radius-md); font-size: 0.9rem; color: var(--color-text-2); cursor: pointer;
   font-weight: 500; white-space: nowrap;
+  transition: background-color 0.15s var(--ease-default), transform 0.1s ease;
 }
+.arrow-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .arrow-btn .arrow-icon { font-size: 1.2rem; line-height: 1; font-weight: 700; }
 .arrow-btn .arrow-text { margin: 0 0.25rem; }
-.arrow-btn:active { background: #f3f4f6; transform: scale(0.97); }
+.arrow-btn:active { background: var(--color-surface-2); transform: scale(0.97); }
 .week-label { flex: 1 1 auto; text-align: center; min-width: 0; }
-.week-title { font-weight: 700; color: #111827; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.week-subtitle { font-size: 0.75rem; color: #6b7280; margin-top: 0.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.week-title { font-weight: 700; color: var(--color-text); font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.week-subtitle { font-size: 0.75rem; color: var(--color-text-3); margin-top: 0.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .error-message {
-  background: #fef2f2; color: #dc2626; padding: 0.85rem 1rem;
-  border-radius: 12px; margin-bottom: 0.75rem; text-align: center; font-size: 0.95rem;
+  background: var(--color-danger-soft); color: var(--color-danger-dark); padding: 0.85rem 1rem;
+  border-radius: var(--radius-md); margin-bottom: 0.75rem; text-align: center; font-size: 0.95rem;
 }
 
 .summary-grid {
@@ -421,22 +446,22 @@ onMounted(async () => {
   gap: 0.6rem; margin-bottom: 1rem;
 }
 .summary-card {
-  border-radius: 14px; padding: 1rem 0.75rem; color: white; text-align: center;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  border-radius: var(--radius-lg); padding: 1rem 0.75rem; color: white; text-align: center;
+  box-shadow: var(--shadow-sm);
 }
-.gradient-1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.gradient-2 { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+.gradient-1 { background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%); }
+.gradient-2 { background: linear-gradient(135deg, #11998e 0%, var(--color-success) 100%); }
 .gradient-3 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
 .summary-label { font-size: 0.8rem; opacity: 0.95; }
 .summary-value { font-size: 1.6rem; font-weight: 800; margin-top: 0.1rem; }
 
 /* 柱状图 */
 .chart-section {
-  background: white; border-radius: 16px; padding: 1rem;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 1rem;
+  background: var(--color-surface); border-radius: var(--radius-xl); padding: 1rem;
+  box-shadow: var(--shadow-sm); margin-bottom: 1rem;
   overflow: hidden;
 }
-.chart-title { font-size: 1rem; font-weight: 700; color: #1f2937; margin-bottom: 0.75rem; }
+.chart-title { font-size: 1rem; font-weight: 700; color: var(--color-text); margin-bottom: 0.75rem; }
 .bar-chart {
   display: grid; grid-template-columns: repeat(7, 1fr);
   gap: 0.4rem; align-items: stretch;
@@ -444,32 +469,36 @@ onMounted(async () => {
 }
 .bar-column {
   display: flex; flex-direction: column; align-items: center;
-  background: transparent; border: none; padding: 0.25rem 0.15rem; border-radius: 12px;
-  cursor: pointer; transition: background 0.15s ease, transform 0.15s ease;
+  background: transparent; border: 2px solid transparent; padding: 0.25rem 0.15rem; border-radius: var(--radius-lg);
+  cursor: pointer; transition: background-color 0.15s var(--ease-default), transform 0.1s ease, border-color 0.15s var(--ease-default);
   -webkit-tap-highlight-color: transparent;
   min-width: 0;
+  font-family: inherit;
+  color: inherit;
 }
-.bar-column:hover { background: #eef2ff; }
+.bar-column:hover { background: var(--color-primary); background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%); }
 .bar-column:active { transform: scale(0.97); }
+.bar-column:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .bar-column.has-record { cursor: pointer; }
+.bar-column:disabled { cursor: default; opacity: 0.5; }
 .bar-count-top {
-  font-size: 0.85rem; font-weight: 700; color: #4338ca;
+  font-size: 0.85rem; font-weight: 700; color: var(--color-primary-dark);
   min-height: 1rem;
 }
 .bar-track {
   position: relative;
   width: 100%; max-width: 44px;
   flex: 1 1 auto; min-height: 60px;
-  background: #f1f5f9;
-  border-radius: 10px 10px 6px 6px;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md) var(--radius-md) var(--radius-sm) var(--radius-sm);
   overflow: hidden;
   display: flex; align-items: flex-end;
   margin: 0.15rem 0;
 }
 .bar-fill {
   width: 100%;
-  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
-  border-radius: 10px 10px 6px 6px;
+  background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-deep) 100%);
+  border-radius: var(--radius-md) var(--radius-md) var(--radius-sm) var(--radius-sm);
   transition: height 0.4s ease;
   box-shadow: inset 0 -2px 0 rgba(0,0,0,0.08);
 }
@@ -481,10 +510,10 @@ onMounted(async () => {
   gap: 0.05rem; text-align: center; flex-shrink: 0;
   padding-top: 0.25rem;
 }
-.bar-weekday { font-size: 0.78rem; font-weight: 700; color: #111827; white-space: nowrap; }
-.bar-date { font-size: 0.7rem; color: #6b7280; white-space: nowrap; }
-.bar-avg { font-size: 0.68rem; color: #4b5563; font-weight: 600; white-space: nowrap; }
-.bar-avg-zero { color: #9ca3af; }
+.bar-weekday { font-size: 0.78rem; font-weight: 700; color: var(--color-text); white-space: nowrap; }
+.bar-date { font-size: 0.7rem; color: var(--color-text-3); white-space: nowrap; }
+.bar-avg { font-size: 0.68rem; color: var(--color-text-2); font-weight: 600; white-space: nowrap; }
+.bar-avg-zero { color: var(--color-text-4); }
 
 /* 当日详情弹窗 */
 .modal-overlay {
@@ -493,11 +522,11 @@ onMounted(async () => {
   z-index: 1000; animation: fadeIn 0.2s ease;
 }
 .modal-card {
-  width: 100%; max-width: 480px; background: #fff;
-  border-radius: 20px 20px 0 0; padding: 1.25rem;
+  width: 100%; max-width: 480px; background: var(--color-surface);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0; padding: 1.25rem;
   max-height: 85vh; overflow-y: auto;
   animation: slideUp 0.25s ease;
-  box-shadow: 0 -10px 40px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-lg);
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
@@ -506,30 +535,32 @@ onMounted(async () => {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 0.75rem;
 }
-.modal-title { margin: 0; font-size: 1.1rem; color: #1f2937; font-weight: 700; }
+.modal-title { margin: 0; font-size: 1.1rem; color: var(--color-text); font-weight: 700; }
 .modal-close {
-  background: #f3f4f6; border: none; border-radius: 999px;
-  width: 32px; height: 32px; cursor: pointer; font-size: 0.9rem; color: #4b5563;
+  background: var(--color-surface-2); border: none; border-radius: 999px;
+  width: 32px; height: 32px; cursor: pointer; font-size: 0.9rem; color: var(--color-text-2);
+  transition: background-color 0.15s var(--ease-default);
 }
+.modal-close:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .modal-summary {
   display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;
 }
 .modal-summary-item {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white; border-radius: 12px; padding: 0.75rem; text-align: center;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.25);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%);
+  color: white; border-radius: var(--radius-md); padding: 0.75rem; text-align: center;
+  box-shadow: var(--shadow-primary);
 }
 .ms-label { font-size: 0.75rem; opacity: 0.9; }
 .ms-value { font-size: 1.5rem; font-weight: 800; margin-top: 0.1rem; }
 
-.modal-empty { text-align: center; padding: 1.5rem 0.5rem; color: #6b7280; }
+.modal-empty { text-align: center; padding: 1.5rem 0.5rem; color: var(--color-text-3); }
 .modal-empty-icon { font-size: 2.5rem; margin-bottom: 0.25rem; }
 
 .type-block { margin-bottom: 0.75rem; }
-.type-title { font-size: 0.8rem; color: #6b7280; margin-bottom: 0.35rem; font-weight: 600; }
+.type-title { font-size: 0.8rem; color: var(--color-text-3); margin-bottom: 0.35rem; font-weight: 600; }
 .type-chip-row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .type-chip {
-  background: #e0e7ff; color: #4338ca;
+  background: #e0e7ff; color: var(--color-primary-dark);
   padding: 0.25rem 0.6rem; border-radius: 999px;
   font-size: 0.8rem; font-weight: 600;
 }
@@ -537,29 +568,42 @@ onMounted(async () => {
 .day-record-list { margin-top: 0.25rem; }
 .day-record-item {
   display: flex; gap: 0.6rem; align-items: flex-start;
-  padding: 0.65rem 0.75rem; border-radius: 10px; background: #f8fafc;
+  padding: 0.65rem 0.75rem; border-radius: var(--radius-md); background: var(--color-surface-2);
   margin-bottom: 0.4rem;
+  border: 1px solid var(--color-border);
+  transition: box-shadow 0.15s var(--ease-default);
 }
+.day-record-item:hover { box-shadow: var(--shadow-sm); }
 .day-record-main { flex: 1; min-width: 0; }
-.day-record-time { color: #667eea; font-weight: 600; font-size: 0.85rem; }
-.day-record-type { color: #4c1d95; font-size: 0.85rem; font-weight: 600; margin-top: 0.1rem; }
-.day-record-category { color: #6b7280; font-weight: 500; }
-.day-record-duration { color: #6b7280; font-weight: 500; }
-.day-record-status { font-size: 0.8rem; color: #374151; margin-top: 0.15rem; }
-.day-record-notes { font-size: 0.85rem; color: #374151; margin-top: 0.15rem; }
+.day-record-time { color: var(--color-primary); font-weight: 600; font-size: 0.85rem; }
+.day-record-type { color: var(--color-primary-dark); font-size: 0.85rem; font-weight: 600; margin-top: 0.1rem; }
+.day-record-category { color: var(--color-text-3); font-weight: 500; }
+.day-record-duration { color: var(--color-text-3); font-weight: 500; }
+.day-record-status { font-size: 0.8rem; color: var(--color-text-2); margin-top: 0.15rem; }
+.day-record-notes { font-size: 0.85rem; color: var(--color-text-2); margin-top: 0.15rem; }
 
 .modal-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
-.modal-actions .btn { min-height: 38px; padding: 0.5rem 1rem; background: #667eea; color: white; border-color: #667eea; border-radius: 10px; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+.modal-actions .btn {
+  min-height: 38px; padding: 0.5rem 1rem;
+  background: var(--color-primary); color: white;
+  border-color: var(--color-primary);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem; font-weight: 600; cursor: pointer;
+  transition: background-color 0.15s var(--ease-default), transform 0.1s ease;
+}
+.modal-actions .btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.modal-actions .btn:active { transform: scale(0.97); }
 
 .records-section {
-  background: white; border-radius: 16px; padding: 1rem;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  background: var(--color-surface); border-radius: var(--radius-xl); padding: 1rem;
+  box-shadow: var(--shadow-sm);
 }
 .records-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
-.section-title { font-size: 1.05rem; color: #1f2937; font-weight: 700; margin: 0; }
+.section-title { font-size: 1.05rem; color: var(--color-text); font-weight: 700; margin: 0; }
 
-.btn { padding: 0.5rem 0.85rem; border-radius: 10px; font-size: 0.85rem; font-weight: 600; cursor: pointer; border: 2px solid transparent; min-height: 38px; }
-.btn-outline { background: white; color: #667eea; border-color: #cbd5e1; }
+.btn { padding: 0.5rem 0.85rem; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 600; cursor: pointer; border: 2px solid transparent; min-height: 38px; transition: background-color 0.15s var(--ease-default), transform 0.1s ease; }
+.btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.btn-outline { background: var(--color-surface); color: var(--color-primary); border-color: var(--color-border-2); }
 .btn:active { transform: scale(0.97); }
 
 .export-buttons { display: flex; gap: 0.4rem; flex-wrap: wrap; }
@@ -568,25 +612,32 @@ onMounted(async () => {
 .records-list { display: flex; flex-direction: column; gap: 0.5rem; }
 .record-item {
   display: flex; gap: 0.75rem; align-items: flex-start;
-  padding: 0.65rem 0.75rem; border-radius: 10px; background: #f8fafc;
+  padding: 0.65rem 0.75rem; border-radius: var(--radius-md); background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  transition: box-shadow 0.15s var(--ease-default);
 }
+.record-item:hover { box-shadow: var(--shadow-sm); }
 .record-main { flex: 1; min-width: 0; }
-.record-time { color: #667eea; font-weight: 600; font-size: 0.85rem; }
-.record-type { color: #4c1d95; font-size: 0.85rem; font-weight: 600; margin-top: 0.1rem; }
-.record-category { color: #6b7280; font-weight: 500; }
-.record-duration { color: #6b7280; font-weight: 500; }
-.record-status { font-size: 0.8rem; color: #374151; margin-top: 0.15rem; }
-.record-notes { font-size: 0.85rem; color: #374151; margin-top: 0.15rem; }
+.record-time { color: var(--color-primary); font-weight: 600; font-size: 0.85rem; }
+.record-type { color: var(--color-primary-dark); font-size: 0.85rem; font-weight: 600; margin-top: 0.1rem; }
+.record-category { color: var(--color-text-3); font-weight: 500; }
+.record-duration { color: var(--color-text-3); font-weight: 500; }
+.record-status { font-size: 0.8rem; color: var(--color-text-2); margin-top: 0.15rem; }
+.record-notes { font-size: 0.85rem; color: var(--color-text-2); margin-top: 0.15rem; }
 
 .delete-btn {
-  background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;
-  padding: 0.3rem 0.5rem; border-radius: 8px; font-size: 0.75rem; font-weight: 600;
+  background: var(--color-danger-soft); color: var(--color-danger-dark); border: 1px solid var(--color-danger-soft);
+  padding: 0.3rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600;
   cursor: pointer; flex-shrink: 0;
+  transition: background-color 0.15s var(--ease-default), transform 0.1s ease;
 }
+.delete-btn:focus-visible { outline: 2px solid var(--color-danger); outline-offset: 2px; }
+.delete-btn:hover { background: #fecaca; }
+.delete-btn:active { transform: scale(0.97); }
 
 .empty-state {
-  background: white; border-radius: 16px; padding: 3rem 1rem; text-align: center;
-  color: #6b7280; box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+  background: var(--color-surface); border-radius: var(--radius-xl); padding: 3rem 1rem; text-align: center;
+  color: var(--color-text-3); box-shadow: var(--shadow-sm);
 }
 .empty-icon { font-size: 3rem; margin-bottom: 0.5rem; }
 
@@ -610,5 +661,43 @@ onMounted(async () => {
   .bar-weekday { font-size: 0.7rem; }
   .bar-date { font-size: 0.62rem; }
   .bar-avg { font-size: 0.6rem; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .week-nav, .chart-section, .records-section, .empty-state, .modal-card {
+    background: var(--color-surface);
+  }
+  .page-title, .week-title, .modal-title, .chart-title, .section-title,
+  .summary-value, .bar-weekday, .ms-value, .bar-count-top {
+    color: var(--color-text);
+  }
+  .week-subtitle, .bar-date, .bar-avg, .type-title, .record-category,
+  .record-duration, .day-record-category, .day-record-duration,
+  .modal-empty, .bar-avg-zero {
+    color: var(--color-text-3);
+  }
+  .arrow-btn, .btn-outline, .modal-close {
+    background: var(--color-surface-2);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+  .bar-track { background: var(--color-surface-2); }
+  .record-item, .day-record-item {
+    background: var(--color-surface-2);
+    border-color: var(--color-border);
+  }
+  .error-message {
+    background: var(--color-danger-soft);
+    color: var(--color-danger-dark);
+  }
+  .delete-btn {
+    background: var(--color-danger-soft);
+    border-color: var(--color-danger-soft);
+  }
+  .arrow-btn:active { background: var(--color-border); }
+  .bar-avg { color: var(--color-text-2); }
+  .record-status, .record-notes, .day-record-status, .day-record-notes {
+    color: var(--color-text-2);
+  }
 }
 </style>

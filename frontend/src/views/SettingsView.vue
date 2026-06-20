@@ -4,15 +4,15 @@
 
     <div class="settings-card">
       <div class="setting-item">
-        <label class="setting-label">每日提醒时间</label>
+        <label for="reminder-hour" class="setting-label">每日提醒时间 - 小时</label>
         <div class="time-picker">
-          <select v-model="hour" class="time-select">
+          <select id="reminder-hour" v-model="hour" class="time-select" aria-label="小时">
             <option v-for="h in 24" :key="h-1" :value="h-1">
               {{ String(h-1).padStart(2, '0') }}
             </option>
           </select>
           <span class="time-separator">:</span>
-          <select v-model="minute" class="time-select">
+          <select id="reminder-minute" v-model="minute" class="time-select" aria-label="分钟">
             <option v-for="m in 60" :key="m-1" :value="m-1">
               {{ String(m-1).padStart(2, '0') }}
             </option>
@@ -37,20 +37,20 @@
     <!-- 修改密码 -->
     <div class="settings-card password-card">
       <h3 class="card-title">🔐 修改密码</h3>
-      
+
       <div class="form-group">
-        <label>旧密码</label>
-        <input v-model="pwdForm.oldPassword" type="password" placeholder="请输入旧密码" class="form-input" />
+        <label for="pwd-old">旧密码</label>
+        <input id="pwd-old" v-model="pwdForm.oldPassword" type="password" placeholder="请输入旧密码" class="form-input" autocomplete="current-password" spellcheck="false" />
       </div>
-      
+
       <div class="form-group">
-        <label>新密码</label>
-        <input v-model="pwdForm.newPassword" type="password" placeholder="至少6位" class="form-input" />
+        <label for="pwd-new">新密码</label>
+        <input id="pwd-new" v-model="pwdForm.newPassword" type="password" placeholder="至少6位" class="form-input" autocomplete="new-password" spellcheck="false" />
       </div>
-      
+
       <div class="form-group">
-        <label>确认新密码</label>
-        <input v-model="pwdForm.confirmPassword" type="password" placeholder="再次输入新密码" class="form-input" />
+        <label for="pwd-confirm">确认新密码</label>
+        <input id="pwd-confirm" v-model="pwdForm.confirmPassword" type="password" placeholder="再次输入新密码" class="form-input" autocomplete="new-password" spellcheck="false" />
       </div>
       
       <button class="save-btn pwd-btn" @click="handlePasswordChange" :disabled="pwdSaving">
@@ -192,7 +192,7 @@ onMounted(() => {
 
 <style scoped>
 .settings-view {
-  animation: fadeIn 0.5s ease;
+  animation: fadeIn 0.4s var(--ease-default);
 }
 
 @keyframes fadeIn {
@@ -202,17 +202,17 @@ onMounted(() => {
 
 .page-title {
   font-size: 1.5rem;
-  color: #1f2937;
+  color: var(--color-text);
   margin-bottom: 1.25rem;
   text-align: center;
   font-weight: 700;
 }
 
 .settings-card {
-  background: white;
-  border-radius: 20px;
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
   padding: 1.5rem 1.25rem 1.75rem;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  box-shadow: var(--shadow-md);
 }
 
 .setting-item {
@@ -222,7 +222,7 @@ onMounted(() => {
 .setting-label {
   display: block;
   font-size: 1rem;
-  color: #1f2937;
+  color: var(--color-text);
   margin-bottom: 0.75rem;
   font-weight: 600;
   text-align: center;
@@ -238,13 +238,13 @@ onMounted(() => {
 .time-select {
   font-size: 1.1rem;
   padding: 0.75rem 1rem;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
-  background: white;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s var(--ease-default), box-shadow 0.15s var(--ease-default);
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-2);
   min-width: 80px;
   text-align: center;
   -webkit-appearance: none;
@@ -253,19 +253,24 @@ onMounted(() => {
 
 .time-select:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--color-primary);
   box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.12);
+}
+
+.time-select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .time-separator {
   font-size: 1.75rem;
   font-weight: 700;
-  color: #667eea;
+  color: var(--color-primary);
 }
 
 .setting-info {
-  background: #eef2ff;
-  border-radius: 12px;
+  background: var(--color-primary-soft);
+  border-radius: var(--radius-md);
   padding: 0.85rem 1rem;
   display: flex;
   align-items: center;
@@ -280,7 +285,7 @@ onMounted(() => {
 }
 
 .setting-info p {
-  color: #4338ca;
+  color: var(--color-primary-dark);
   margin: 0;
   font-size: 0.95rem;
   line-height: 1.4;
@@ -289,36 +294,33 @@ onMounted(() => {
 
 .save-btn {
   width: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 0.95rem;
   font-size: 1.05rem;
   font-weight: 700;
   color: white;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  transition: filter 0.15s var(--ease-default), transform 0.1s var(--ease-default), box-shadow 0.15s var(--ease-default);
+  box-shadow: var(--shadow-primary);
   min-height: 50px;
   -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
 }
 
-.save-btn:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.save-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
+.save-btn:hover:not(:disabled) { filter: brightness(1.05); }
+.save-btn:active:not(:disabled) { transform: scale(0.98); }
+.save-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+.save-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 
 .message {
   margin-top: 0.75rem;
   padding: 0.7rem 0.85rem;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   text-align: center;
   font-size: 0.9rem;
-  animation: slideIn 0.3s ease;
+  animation: slideIn 0.3s var(--ease-default);
 }
 
 @keyframes slideIn {
@@ -327,25 +329,25 @@ onMounted(() => {
 }
 
 .message.success {
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--color-success-soft);
+  color: var(--color-success-dark);
 }
 
 .message.error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-soft);
+  color: var(--color-danger-dark);
 }
 
 .tips-card {
-  background: white;
-  border-radius: 20px;
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
   padding: 1.25rem 1.25rem 1.5rem;
   margin-top: 1.25rem;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  box-shadow: var(--shadow-md);
 }
 
 .tips-card h3 {
-  color: #1f2937;
+  color: var(--color-text);
   margin-bottom: 0.75rem;
   font-size: 1.05rem;
   font-weight: 700;
@@ -354,7 +356,7 @@ onMounted(() => {
 .tips-card ul {
   margin: 0;
   padding-left: 1.25rem;
-  color: #4b5563;
+  color: var(--color-text-2);
   line-height: 1.7;
   font-size: 0.95rem;
 }
@@ -369,7 +371,7 @@ onMounted(() => {
 }
 
 .card-title {
-  color: #1f2937;
+  color: var(--color-text);
   font-size: 1.1rem;
   font-weight: 700;
   margin-bottom: 1rem;
@@ -383,7 +385,7 @@ onMounted(() => {
 .form-group label {
   display: block;
   font-size: 0.9rem;
-  color: #4b5563;
+  color: var(--color-text-2);
   font-weight: 500;
   margin-bottom: 0.4rem;
 }
@@ -391,80 +393,63 @@ onMounted(() => {
 .form-input {
   width: 100%;
   padding: 0.75rem 1rem;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
   font-size: 1rem;
-  transition: all 0.2s ease;
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: border-color 0.15s var(--ease-default), box-shadow 0.15s var(--ease-default);
   box-sizing: border-box;
+  font-family: inherit;
 }
 
 .form-input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--color-primary);
   box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.12);
+}
+
+.form-input:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .pwd-btn {
   margin-top: 0.5rem;
 }
 
+/* 暗模式 */
+@media (prefers-color-scheme: dark) {
+  .settings-card,
+  .tips-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+  }
+
+  .time-select,
+  .form-input {
+    background: var(--color-bg);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+
+  .setting-info { background: var(--color-primary-soft); }
+  .message.success { background: var(--color-success-soft); }
+  .message.error { background: var(--color-danger-soft); }
+}
+
 /* 小屏（<=480px） */
 @media (max-width: 480px) {
-  .page-title {
-    font-size: 1.3rem;
-  }
-
-  .settings-card {
-    padding: 1.25rem 1rem 1.5rem;
-    border-radius: 18px;
-  }
-
-  .setting-label {
-    font-size: 0.95rem;
-    margin-bottom: 0.6rem;
-  }
-
-  .time-select {
-    font-size: 1rem;
-    padding: 0.65rem 0.75rem;
-    min-width: 64px;
-  }
-
-  .time-separator {
-    font-size: 1.5rem;
-  }
-
-  .setting-info {
-    padding: 0.75rem 0.85rem;
-    gap: 0.5rem;
-  }
-
-  .info-icon {
-    font-size: 1.2rem;
-  }
-
-  .setting-info p {
-    font-size: 0.9rem;
-  }
-
-  .save-btn {
-    font-size: 1rem;
-    padding: 0.85rem;
-    min-height: 48px;
-  }
-
-  .tips-card {
-    padding: 1.1rem 1rem 1.25rem;
-    border-radius: 18px;
-  }
-
-  .tips-card h3 {
-    font-size: 1rem;
-  }
-
-  .tips-card ul {
-    font-size: 0.9rem;
-    padding-left: 1.1rem;
-  }
+  .page-title { font-size: 1.3rem; }
+  .settings-card { padding: 1.25rem 1rem 1.5rem; border-radius: 18px; }
+  .setting-label { font-size: 0.95rem; margin-bottom: 0.6rem; }
+  .time-select { font-size: 1rem; padding: 0.65rem 0.75rem; min-width: 64px; }
+  .time-separator { font-size: 1.5rem; }
+  .setting-info { padding: 0.75rem 0.85rem; gap: 0.5rem; }
+  .info-icon { font-size: 1.2rem; }
+  .setting-info p { font-size: 0.9rem; }
+  .save-btn { font-size: 1rem; padding: 0.85rem; min-height: 48px; }
+  .tips-card { padding: 1.1rem 1rem 1.25rem; border-radius: 18px; }
+  .tips-card h3 { font-size: 1rem; }
 }
 </style>

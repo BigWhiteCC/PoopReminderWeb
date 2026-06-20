@@ -1,6 +1,6 @@
 <template>
   <div class="home-view">
-    <div v-if="errorMessage" class="error-message">
+    <div v-if="errorMessage" class="error-message" role="alert">
       {{ errorMessage }}
     </div>
 
@@ -20,17 +20,21 @@
       </div>
 
       <!-- 拉屎中：选择类型 + 拉完了按钮 -->
-      <div v-if="isPooping" class="poop-type-grid">
-        <div
+      <div v-if="isPooping" class="poop-type-grid" role="radiogroup" aria-label="选择大便类型">
+        <button
           v-for="pt in poopTypes" :key="pt.id"
+          type="button"
           class="poop-type-item"
           :class="{ active: selectedPoopType === pt.id }"
+          role="radio"
+          :aria-checked="selectedPoopType === pt.id"
+          :aria-label="pt.name + '，' + pt.description"
           @click="selectedPoopType = pt.id"
         >
-          <div class="poop-type-emoji">{{ pt.emoji }}</div>
-          <div class="poop-type-name">{{ pt.name }}</div>
-          <div class="poop-type-desc">{{ pt.description }}</div>
-        </div>
+          <span class="poop-type-emoji" aria-hidden="true">{{ pt.emoji }}</span>
+          <span class="poop-type-name">{{ pt.name }}</span>
+          <span class="poop-type-desc">{{ pt.description }}</span>
+        </button>
       </div>
 
       <div v-if="isPooping" class="poop-actions">
@@ -64,13 +68,14 @@
     </div>
 
     <!-- 补充记录弹窗 -->
-    <div v-if="showSupplement" class="modal-overlay" @click.self="showSupplement = false">
-      <div class="modal-card">
-        <h3 class="modal-title">补充记录</h3>
+    <div v-if="showSupplement" class="modal-overlay" @click.self="showSupplement = false" @keydown.esc="showSupplement = false">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="supplement-title" tabindex="-1">
+        <h3 id="supplement-title" class="modal-title">补充记录</h3>
 
-        <label class="input-label full">
+        <label for="supplement-date" class="input-label full">
           开始时间
           <input
+            id="supplement-date"
             type="datetime-local"
             v-model="supplement.date"
             :max="supplementMax"
@@ -80,30 +85,34 @@
           <span class="input-hint">不允许选择今天之后的时间</span>
         </label>
 
-        <label class="input-label">
+        <label for="supplement-duration" class="input-label">
           持续时长（分钟，可填小数，如 3.5 = 3分30秒）
           <input
+            id="supplement-duration"
             type="number" min="0" max="1440" step="0.01"
             v-model="supplement.duration"
             class="input-field"
             placeholder="分钟，例如 3.5"
+            autocomplete="off"
           />
         </label>
 
-        <div class="input-label full">
-          大便类型
-        </div>
-        <div class="poop-type-grid small">
-          <div
+        <div class="input-label full">大便类型</div>
+        <div class="poop-type-grid small" role="radiogroup" aria-label="选择大便类型">
+          <button
             v-for="pt in poopTypes" :key="pt.id"
+            type="button"
             class="poop-type-item"
             :class="{ active: supplement.poopType === pt.id }"
+            role="radio"
+            :aria-checked="supplement.poopType === pt.id"
+            :aria-label="pt.name + '，' + pt.description"
             @click="supplement.poopType = pt.id"
           >
-            <div class="poop-type-emoji">{{ pt.emoji }}</div>
-            <div class="poop-type-name">{{ pt.name }}</div>
-            <div class="poop-type-desc">{{ pt.description }}</div>
-          </div>
+            <span class="poop-type-emoji" aria-hidden="true">{{ pt.emoji }}</span>
+            <span class="poop-type-name">{{ pt.name }}</span>
+            <span class="poop-type-desc">{{ pt.description }}</span>
+          </button>
         </div>
 
         <div class="modal-actions">
@@ -419,9 +428,14 @@ onBeforeUnmount(() => {
 }
 
 .error-message {
-  background: #fef2f2; color: #dc2626; padding: 0.85rem 1rem;
-  border-radius: 12px; margin-bottom: 0.75rem; text-align: center;
-  font-size: 0.95rem; animation: slideIn 0.3s ease;
+  background: var(--color-danger-soft);
+  color: var(--color-danger-dark);
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 0.75rem;
+  text-align: center;
+  font-size: 0.95rem;
+  animation: slideIn 0.3s ease;
 }
 
 @keyframes slideIn {
@@ -430,9 +444,12 @@ onBeforeUnmount(() => {
 }
 
 .streak-card {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  border-radius: 22px; padding: 1.5rem 1.25rem; text-align: center;
-  color: white; box-shadow: 0 10px 40px rgba(245, 87, 108, 0.3);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%);
+  border-radius: var(--radius-xl);
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+  color: white;
+  box-shadow: 0 10px 40px rgba(245, 87, 108, 0.3);
   margin-bottom: 1.25rem;
 }
 
@@ -447,21 +464,27 @@ onBeforeUnmount(() => {
 .streak-label { font-size: 1rem; opacity: 0.92; margin-top: 0.35rem; }
 
 .record-section {
-  background: white; border-radius: 20px; padding: 1.25rem;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08); margin-bottom: 1.25rem;
+  background: white;
+  border-radius: var(--radius-xl);
+  padding: 1.25rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  margin-bottom: 1.25rem;
 }
 
 .section-title-small {
-  text-align: center; color: #4b5563; font-weight: 500;
-  font-size: 0.95rem; margin: 0 0 1rem 0;
+  text-align: center;
+  color: var(--color-text-2);
+  font-weight: 500;
+  font-size: 0.95rem;
+  margin: 0 0 1rem 0;
 }
 
 .timer-display {
   text-align: center; padding: 1rem 0 1.25rem 0;
 }
 .timer-icon { font-size: 3rem; margin-bottom: 0.5rem; animation: pulse 1.2s infinite; }
-.timer-value { font-size: 2.5rem; font-weight: 800; color: #667eea; letter-spacing: 2px; }
-.timer-label { font-size: 0.9rem; color: #6b7280; margin-top: 0.25rem; }
+.timer-value { font-size: 2.5rem; font-weight: 800; color: var(--color-primary); letter-spacing: 2px; }
+.timer-label { font-size: 0.9rem; color: var(--color-text-3); margin-top: 0.25rem; }
 
 @keyframes pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
@@ -469,22 +492,37 @@ onBeforeUnmount(() => {
 }
 
 .poop-type-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-  gap: 0.5rem; margin-bottom: 1.25rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
 }
 .poop-type-grid.small { margin-bottom: 1rem; }
 
 .poop-type-item {
-  background: #f8fafc; border: 2px solid transparent; border-radius: 14px;
-  padding: 0.75rem 0.35rem; cursor: pointer; transition: all 0.2s ease;
-  text-align: center; min-height: 92px;
-  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  background: var(--color-surface);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.35rem;
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease-default), color 0.15s var(--ease-default), box-shadow 0.15s var(--ease-default);
+  text-align: center;
+  min-height: 92px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
   -webkit-tap-highlight-color: transparent;
 }
 .poop-type-item:active { transform: scale(0.97); }
+.poop-type-item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
 .poop-type-item.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white; box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  background: var(--color-primary);
+  color: white;
+  box-shadow: var(--shadow-primary);
 }
 
 .poop-type-emoji { font-size: 1.75rem; line-height: 1.2; margin-bottom: 0.2rem; }
@@ -495,44 +533,56 @@ onBeforeUnmount(() => {
   display: flex; gap: 0.6rem; margin-top: 0.25rem;
 }
 .poop-actions .record-btn {
-  flex: 1; min-height: 52px; font-size: 1.05rem;
+  flex: 1;
+  min-height: 52px;
+  font-size: 1.05rem;
 }
 
 .record-btn {
-  width: 100%; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-  border: none; border-radius: 14px; padding: 1rem 1.5rem;
-  font-size: 1.15rem; font-weight: 700; color: white;
-  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
-  gap: 0.5rem; box-shadow: 0 8px 30px rgba(56, 239, 125, 0.35);
-  transition: all 0.2s ease; min-height: 56px;
+  width: 100%;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 1rem 1.5rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-shadow: var(--shadow-primary);
+  transition: background-color 0.15s var(--ease-default), color 0.15s var(--ease-default), box-shadow 0.15s var(--ease-default);
+  min-height: 56px;
   -webkit-tap-highlight-color: transparent;
 }
 .record-btn:active:not(:disabled) { transform: scale(0.98); }
 .record-btn:disabled { opacity: 0.7; cursor: not-allowed; }
 .record-btn.btn-stop {
-  background: linear-gradient(135deg, #ff6a00 0%, #ee0979 100%);
-  box-shadow: 0 8px 30px rgba(238, 9, 121, 0.35);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%);
+  box-shadow: var(--shadow-primary);
 }
 .record-btn.btn-cancel {
   background: #fff;
-  color: #4b5563;
-  border: 2px solid #e5e7eb;
+  color: var(--color-text-2);
+  border: 2px solid var(--color-border);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 }
-.record-btn.btn-cancel:active:not(:disabled) { border-color: #9ca3af; }
+.record-btn.btn-cancel:active:not(:disabled) { border-color: var(--color-text-4); }
 .record-btn.btn-start {
   flex: 1;
-  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-  box-shadow: 0 8px 24px rgba(56, 239, 125, 0.35);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%);
+  box-shadow: var(--shadow-primary);
 }
 .record-btn.btn-supplement {
   flex: 1;
   background: #fff;
-  color: #4b5563;
-  border: 2px solid #e5e7eb;
+  color: var(--color-text-2);
+  border: 2px solid var(--color-border);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
-.record-btn.btn-supplement:hover { border-color: #667eea; color: #667eea; }
+.record-btn.btn-supplement:hover { border-color: var(--color-primary); color: var(--color-primary); }
 .record-btn.btn-supplement:active { transform: scale(0.97); }
 
 .start-row {
@@ -551,14 +601,23 @@ onBeforeUnmount(() => {
 
 /* Modal */
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55);
-  display: flex; align-items: flex-end; justify-content: center;
-  z-index: 1000; animation: fadeIn 0.2s ease;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
 }
 .modal-card {
-  width: 100%; max-width: 480px; background: #fff;
-  border-radius: 20px 20px 0 0; padding: 1.25rem;
-  max-height: 85vh; overflow-y: auto;
+  width: 100%;
+  max-width: 480px;
+  background: #fff;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: 1.25rem;
+  max-height: 85vh;
+  overflow-y: auto;
   animation: slideUp 0.25s ease;
   box-shadow: 0 -10px 40px rgba(0,0,0,0.15);
 }
@@ -567,103 +626,204 @@ onBeforeUnmount(() => {
   to { transform: translateY(0); }
 }
 .modal-title {
-  margin: 0 0 1rem 0; font-size: 1.1rem; text-align: center; color: #1f2937;
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  text-align: center;
+  color: var(--color-text);
 }
 
 .modal-actions {
-  display: flex; gap: 0.75rem; margin-top: 1rem;
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
 }
 .btn-primary, .btn-secondary {
-  flex: 1; border: none; border-radius: 12px; padding: 0.75rem 1rem;
-  font-size: 1rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease;
+  flex: 1;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease-default), color 0.15s var(--ease-default), box-shadow 0.15s var(--ease-default);
   -webkit-tap-highlight-color: transparent;
 }
 .btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff; box-shadow: 0 6px 20px rgba(102, 126, 234, 0.35);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%);
+  color: #fff;
+  box-shadow: var(--shadow-primary);
 }
 .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
 .btn-secondary {
-  background: #f3f4f6; color: #4b5563;
+  background: var(--color-surface-2);
+  color: var(--color-text-2);
 }
 .btn-primary:active:not(:disabled), .btn-secondary:active { transform: scale(0.98); }
 
 .extra-inputs {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
   margin-bottom: 1.25rem;
 }
 .input-label {
-  display: flex; flex-direction: column; gap: 0.35rem;
-  font-size: 0.85rem; color: #374151; font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--color-text-2);
+  font-weight: 500;
   margin-bottom: 0.75rem;
 }
 .input-label.full { grid-column: 1 / -1; }
 
 .input-field {
-  width: 100%; padding: 0.7rem 0.9rem; border: 2px solid #e5e7eb;
-  border-radius: 10px; font-size: 0.95rem; transition: all 0.2s ease;
-  -webkit-appearance: none; background: #fff; box-sizing: border-box;
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  transition: background-color 0.15s var(--ease-default), color 0.15s var(--ease-default), box-shadow 0.15s var(--ease-default);
+  -webkit-appearance: none;
+  background: #fff;
+  box-sizing: border-box;
 }
 .input-field:focus {
-  outline: none; border-color: #667eea;
+  outline: none;
+  border-color: var(--color-primary);
   box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.12);
 }
 .input-hint {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--color-text-3);
   font-weight: 400;
   line-height: 1.3;
 }
 
 .recent-header {
-  display: flex; align-items: center; gap: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   margin-bottom: 0.75rem;
 }
 .section-title {
-  font-size: 1.1rem; color: #1f2937; padding-left: 0.4rem;
-  border-left: 4px solid #667eea; font-weight: 700; margin: 0;
+  font-size: 1.1rem;
+  color: var(--color-text);
+  padding-left: 0.4rem;
+  border-left: 4px solid var(--color-primary);
+  font-weight: 700;
+  margin: 0;
 }
-.record-count { color: #6b7280; font-size: 0.85rem; }
+.record-count { color: var(--color-text-3); font-size: 0.85rem; }
 
 .supplement-inline-btn {
   margin-left: auto;
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  background: #fff; border: 1.5px solid #e5e7eb;
-  border-radius: 10px; padding: 0.4rem 0.8rem;
-  font-size: 0.85rem; font-weight: 600; color: #4b5563;
-  cursor: pointer; transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #fff;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-2);
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease-default), color 0.15s var(--ease-default), box-shadow 0.15s var(--ease-default);
   -webkit-tap-highlight-color: transparent;
 }
-.supplement-inline-btn:hover { border-color: #667eea; color: #667eea; }
+.supplement-inline-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
 .supplement-inline-btn:active { transform: scale(0.97); }
 
 .empty-state {
-  background: white; border-radius: 16px; padding: 2.5rem 1rem;
-  text-align: center; color: #6b7280; box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--color-text-3);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.04);
 }
 .empty-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
 
 .records-list { display: flex; flex-direction: column; gap: 0.75rem; }
 
 .record-item {
-  background: white; border-radius: 14px; padding: 0.9rem 1rem;
+  background: white;
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
 
-.record-time { color: #667eea; font-weight: 600; font-size: 0.95rem; }
+.record-time { color: var(--color-primary); font-weight: 600; font-size: 0.95rem; }
 .record-poop-type {
-  color: #4c1d95; font-size: 0.9rem; font-weight: 600; margin-top: 0.3rem;
+  color: var(--color-primary-deep);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-top: 0.3rem;
 }
-.record-category { color: #6b7280; font-weight: 500; }
-.record-duration { color: #6b7280; font-weight: 500; }
-.record-status { color: #374151; margin-top: 0.3rem; font-size: 0.85rem; }
-.record-notes { color: #374151; margin-top: 0.3rem; font-size: 0.9rem; }
-.record-device { color: #9ca3af; font-size: 0.75rem; margin-top: 0.3rem; }
+.record-category { color: var(--color-text-3); font-weight: 500; }
+.record-duration { color: var(--color-text-3); font-weight: 500; }
+.record-status { color: var(--color-text-2); margin-top: 0.3rem; font-size: 0.85rem; }
+.record-notes { color: var(--color-text-2); margin-top: 0.3rem; font-size: 0.9rem; }
+.record-device { color: var(--color-text-4); font-size: 0.75rem; margin-top: 0.3rem; }
 
 @media (max-width: 480px) {
-  .streak-card { padding: 1.25rem 1rem; border-radius: 20px; }
+  .streak-card { padding: 1.25rem 1rem; border-radius: var(--radius-xl); }
   .streak-number { font-size: 2.75rem; }
   .record-section { padding: 1rem; }
   .section-title { font-size: 1.05rem; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .streak-card {
+    background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary-deep) 100%);
+    box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
+  }
+  .record-section {
+    background: var(--color-surface-2);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .timer-value { color: var(--color-primary); }
+  .timer-label { color: var(--color-text-2); }
+  .poop-type-item { background: var(--color-surface); color: var(--color-text); }
+  .poop-type-item.active {
+    background: var(--color-primary);
+    color: white;
+    box-shadow: var(--shadow-primary);
+  }
+  .record-btn.btn-cancel,
+  .record-btn.btn-supplement {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-border-2);
+  }
+  .modal-card {
+    background: var(--color-surface-2);
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.3);
+  }
+  .modal-title { color: var(--color-text); }
+  .btn-secondary { background: var(--color-surface); color: var(--color-text); }
+  .input-label { color: var(--color-text-2); }
+  .input-field {
+    background: var(--color-surface);
+    border-color: var(--color-border-2);
+    color: var(--color-text);
+  }
+  .recent-section .section-title { color: var(--color-text); }
+  .empty-state {
+    background: var(--color-surface-2);
+    color: var(--color-text-3);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  }
+  .records-list .record-item {
+    background: var(--color-surface-2);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  }
+  .record-poop-type { color: var(--color-primary); }
+  .supplement-inline-btn {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-border-2);
+  }
 }
 </style>

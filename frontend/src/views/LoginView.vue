@@ -16,6 +16,8 @@
             type="text"
             placeholder="请输入用户名"
             class="form-input"
+            autocomplete="username"
+            spellcheck="false"
           />
         </div>
 
@@ -27,6 +29,8 @@
             :type="isLogin ? 'text' : 'email'"
             :placeholder="isLogin ? '输入邮箱或用户名' : '请输入邮箱'"
             class="form-input"
+            autocomplete="username"
+            spellcheck="false"
           />
         </div>
 
@@ -38,6 +42,8 @@
             type="password"
             placeholder="请输入密码"
             class="form-input"
+            autocomplete="current-password"
+            spellcheck="false"
           />
         </div>
 
@@ -49,6 +55,8 @@
             type="password"
             placeholder="请再次输入密码"
             class="form-input"
+            autocomplete="new-password"
+            spellcheck="false"
           />
         </div>
 
@@ -59,7 +67,7 @@
 
         <component :is="DevHint" v-if="isLogin" @fill="fillTestAccount" />
 
-        <div v-if="error" class="error-message">{{ error }}</div>
+        <div v-if="error" class="error-message" role="alert">{{ error }}</div>
       </form>
 
       <div class="auth-switch">
@@ -172,18 +180,18 @@ const handleSubmit = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%);
   padding: 1.5rem clamp(0.75rem, 3vw, 2rem);
   box-sizing: border-box;
 }
 
 .auth-card {
   background: white;
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
   padding: clamp(1.5rem, 4vw, 2.5rem) clamp(1.25rem, 4vw, 2.25rem);
   width: 100%;
   max-width: min(420px, 100%);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
   display: flex;
   flex-direction: column;
 }
@@ -200,13 +208,13 @@ const handleSubmit = async () => {
 }
 
 .auth-header h1 {
-  color: #333;
+  color: var(--color-text);
   font-size: clamp(1.25rem, 3.5vw, 1.75rem);
   margin-bottom: 0.4rem;
 }
 
 .auth-header p {
-  color: #666;
+  color: var(--color-text-3);
   font-size: clamp(0.85rem, 2.2vw, 1rem);
 }
 
@@ -223,7 +231,7 @@ const handleSubmit = async () => {
 }
 
 .form-group label {
-  color: #555;
+  color: var(--color-text-2);
   font-weight: 500;
   font-size: clamp(0.8rem, 2vw, 0.95rem);
 }
@@ -231,10 +239,12 @@ const handleSubmit = async () => {
 .form-input {
   width: 100%;
   padding: clamp(0.7rem, 2vw, 0.95rem) 1rem;
-  border: 2px solid #e0e0e0;
-  border-radius: 12px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
   font-size: clamp(0.9rem, 2.3vw, 1.05rem);
-  transition: all 0.2s ease;
+  color: var(--color-text);
+  background: #ffffff;
+  transition: border-color 0.15s var(--ease-default), box-shadow 0.15s var(--ease-default);
   -webkit-appearance: none;
   appearance: none;
   box-sizing: border-box;
@@ -242,21 +252,21 @@ const handleSubmit = async () => {
 
 .form-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.12);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-primary);
 }
 
 .auth-btn {
   width: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-deep) 100%);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: clamp(0.75rem, 2vw, 1rem);
   font-size: clamp(0.95rem, 2.3vw, 1.1rem);
   font-weight: 600;
   color: white;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.15s var(--ease-default), transform 0.15s var(--ease-default), opacity 0.15s var(--ease-default);
   margin-top: 0.25rem;
   min-height: 48px;
   -webkit-tap-highlight-color: transparent;
@@ -272,7 +282,10 @@ const handleSubmit = async () => {
 }
 
 .error-message {
-  color: #ef4444;
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-sm);
   text-align: center;
   font-size: clamp(0.8rem, 2vw, 0.95rem);
   margin-top: 0.25rem;
@@ -285,7 +298,7 @@ const handleSubmit = async () => {
   justify-content: center;
   gap: 0.4rem;
   margin-top: clamp(1rem, 2.5vw, 1.5rem);
-  color: #666;
+  color: var(--color-text-3);
   font-size: clamp(0.8rem, 2vw, 0.95rem);
   flex-wrap: wrap;
 }
@@ -293,7 +306,7 @@ const handleSubmit = async () => {
 .switch-btn {
   background: none;
   border: none;
-  color: #667eea;
+  color: var(--color-primary);
   font-weight: 600;
   cursor: pointer;
   padding: 0.25rem 0.4rem;
@@ -313,7 +326,7 @@ const handleSubmit = async () => {
   }
 
   .auth-card {
-    border-radius: 20px;
+    border-radius: var(--radius-lg);
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
   }
 }
@@ -323,6 +336,48 @@ const handleSubmit = async () => {
   .auth-container {
     align-items: flex-start;
     padding: 1rem;
+  }
+}
+
+/* 暗模式 */
+@media (prefers-color-scheme: dark) {
+  .auth-card {
+    background: #1f2937;
+  }
+
+  .auth-header h1 {
+    color: #f9fafb;
+  }
+
+  .auth-header p {
+    color: #9ca3af;
+  }
+
+  .form-group label {
+    color: #d1d5db;
+  }
+
+  .form-input {
+    background: #374151;
+    color: #f9fafb;
+    border-color: #4b5563;
+  }
+
+  .form-input::placeholder {
+    color: #6b7280;
+  }
+
+  .form-input:focus {
+    border-color: var(--color-primary);
+  }
+
+  .error-message {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.15);
+  }
+
+  .auth-switch {
+    color: #9ca3af;
   }
 }
 </style>
