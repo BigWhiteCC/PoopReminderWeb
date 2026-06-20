@@ -30,8 +30,11 @@ DEPLOY_TMP=$(mktemp -d)
 mkdir -p "$DEPLOY_TMP/poopreminder/frontend/dist"
 
 cp index.js "$DEPLOY_TMP/poopreminder/"
+cp -r src/ "$DEPLOY_TMP/poopreminder/src/"
 cp package.json "$DEPLOY_TMP/poopreminder/"
-cp package-lock.json "$DEPLOY_TMP/poopreminder/"
+cp package-lock.json "$DEPLOY_TMP/poopreminder/"</parameter>
+</tool_call>
+</minimax:tool_call>
 cp -r frontend/dist/* "$DEPLOY_TMP/poopreminder/frontend/dist/"
 
 # 创建启动脚本
