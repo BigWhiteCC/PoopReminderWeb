@@ -230,6 +230,8 @@ onMounted(async () => {
   -webkit-appearance: none; appearance: none; background: var(--color-surface);
   color: var(--color-text);
   transition: border-color 0.15s var(--ease-default), box-shadow 0.15s var(--ease-default);
+  min-height: 44px; /* 日期选择框 placeholder/选中态高度一致 */
+  box-sizing: border-box;
 }
 .input:focus {
   outline: none; border-color: var(--color-primary);

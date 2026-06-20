@@ -911,6 +911,7 @@ select.input {
 
 input[type="date"].input {
   line-height: normal;
+  min-height: 44px;
 }
 
 .input:focus {
