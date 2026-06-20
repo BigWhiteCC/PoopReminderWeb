@@ -1,0 +1,109 @@
+#!/bin/bash
+set -e
+
+if [ $# -lt 2 ]; then
+    echo "Usage: $0 <user@host> <deploy-dir> [ssh-port]"
+    exit 1
+fi
+
+DEST=$1
+DEPLOY_DIR=$2
+SSH_PORT=${3:-22}
+
+echo "Deploying to $DEST:$DEPLOY_DIR"
+
+# Build frontend if needed
+if [ ! -f "index.js" ] || [ ! -d "frontend/dist" ]; then
+    echo "Building frontend..."
+    (cd frontend && npm ci --silent && npm run build)
+fi
+
+# Prepare package
+echo "Preparing deployment package..."
+DEPLOY_TMP=$(mktemp -d)
+mkdir -p "$DEPLOY_TMP/poopreminder/frontend/dist"
+
+cp index.js "$DEPLOY_TMP/poopreminder/"
+cp -r src/ "$DEPLOY_TMP/poopreminder/src/"
+cp package.json "$DEPLOY_TMP/poopreminder/"
+cp package-lock.json "$DEPLOY_TMP/poopreminder/"
+cp -r frontend/dist/* "$DEPLOY_TMP/poopreminder/frontend/dist/"
+
+# Create start script
+START_SCRIPT="$DEPLOY_TMP/poopreminder/start.sh"
+printf '#!/bin/bash\ncd "$(dirname "$0")"\nif [ ! -d "node_modules" ]; then npm ci --silent; fi\nPORT=${PORT:-3000} npm start\n' > "$START_SCRIPT"
+chmod +x "$START_SCRIPT"
+
+# Create systemd service
+SERVICE_FILE="$DEPLOY_TMP/poopreminder/poopreminder.service"
+cat > "$SERVICE_FILE" << 'ENDFILE'
+[Unit]
+Description=PoopReminder Web Application
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/poopreminder
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=JWT_SECRET=please_replace_this_with_a_secure_random_string
+ExecStart=/usr/bin/node /opt/poopreminder/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+ENDFILE
+
+# Create tar package
+ARCHIVE="/tmp/poopreminder-deploy-$(date +%Y%m%d_%H%M%S).tar.gz"
+tar czf "$ARCHIVE" -C "$DEPLOY_TMP" poopreminder
+echo "Package: $ARCHIVE ($(du -sh "$ARCHIVE" | cut -f1))"
+
+# Upload
+echo "Uploading to server..."
+scp -P $SSH_PORT "$ARCHIVE" "$DEST:/tmp/"
+
+# Remote deployment
+echo "Running remote deployment..."
+ssh -p $SSH_PORT "$DEST" /bin/bash << 'ENDREMOTE'
+set -e
+BACKUP_DIR="/opt/poopreminder_backup_$(date +%Y%m%d_%H%M%S)"
+if [ -d /opt/poopreminder ]; then
+    echo "Backing up old deployment..."
+    cp -r /opt/poopreminder "$BACKUP_DIR"
+    if [ -f /opt/poopreminder/poopreminder.db ]; then
+        cp /opt/poopreminder/poopreminder.db /tmp/poopreminder.db.bak
+    fi
+fi
+
+echo "Extracting new deployment..."
+rm -rf /opt/poopreminder
+mkdir -p /opt/poopreminder
+tar xzf /tmp/poopreminder-deploy-*.tar.gz -C /opt/poopreminder --strip-components=1
+
+if [ -f /tmp/poopreminder.db.bak ]; then
+    mv /tmp/poopreminder.db.bak /opt/poopreminder/poopreminder.db
+    echo "Database restored"
+fi
+
+echo "Installing dependencies..."
+npm ci --silent 2>/dev/null || npm install --silent
+
+echo "Restarting service..."
+sudo cp /opt/poopreminder/poopreminder.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart poopreminder
+
+sleep 2
+if systemctl is-active --quiet poopreminder; then
+    echo "SUCCESS: Service is running"
+else
+    echo "FAILED: Service not running. Logs:"
+    sudo journalctl -u poopreminder --no-pager -n 20
+fi
+ENDREMOTE
+
+rm -rf "$DEPLOY_TMP"
+rm -f "$ARCHIVE"
+echo "Done"

@@ -7,12 +7,31 @@ const { JWT_SECRET, IS_PROD, IS_DEV } = require('./config');
 const { getDb } = require('./database');
 
 // -------- Helmet 安全头 --------
+// 注意：HTTP-only 服务器禁用 HSTS 和 upgrade-insecure-requests，
+// 否则浏览器会把子请求强制升级到 https://，导致 443 端口拒绝连接，页面白屏。
 function securityHeaders(app) {
     app.use(helmet({
         frameguard: IS_PROD ? { action: 'deny' } : false,
         noSniff: true,
         xssFilter: true,
         ieNoOpen: true,
+        hsts: false,
+        contentSecurityPolicy: {
+            useDefaults: true,
+            directives: {
+                'default-src': ["'self'"],
+                'base-uri': ["'self'"],
+                'font-src': ["'self'", 'https:', 'data:'],
+                'form-action': ["'self'"],
+                'frame-ancestors': ["'self'"],
+                'img-src': ["'self'", 'data:'],
+                'object-src': ["'none'"],
+                'script-src': ["'self'"],
+                'script-src-attr': ["'none'"],
+                'style-src': ["'self'", 'https:', "'unsafe-inline'"],
+                'upgrade-insecure-requests': null,
+            },
+        },
     }));
 }
 
