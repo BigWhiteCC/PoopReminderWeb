@@ -56,10 +56,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=www-data
 WorkingDirectory=/opt/poopreminder
 Environment=NODE_ENV=production
 Environment=PORT=3000
+# JWT 签名密钥（必须配置，生产环境请替换为随机长字符串）
+# 生成命令: openssl rand -hex 48
+Environment=JWT_SECRET=please_replace_this_with_a_secure_random_string
 ExecStart=/usr/bin/node /opt/poopreminder/index.js
 Restart=on-failure
 RestartSec=5
@@ -73,6 +75,19 @@ cat > "$DEPLOY_TMP/poopreminder/README_DEPLOY.txt" << 'EOF'
 ========== PoopReminder 部署说明 ==========
 
 项目已部署到此目录。
+
+⚠️  首次部署必读：
+1) 请编辑 poopreminder.service 中的 JWT_SECRET，替换为安全的随机字符串：
+     openssl rand -hex 48
+   然后复制 service 文件：
+     sudo cp poopreminder.service /etc/systemd/system/
+     sudo systemctl daemon-reload
+
+2) 如果直接用 npm start 运行，需在启动前设置环境变量：
+     export NODE_ENV=production
+     export JWT_SECRET=你的随机密钥
+
+3) 生产环境下 NODE_ENV=production 时不会自动创建测试账号。
 
 启动方式：
   1) 首次运行需要安装依赖: npm ci
@@ -89,7 +104,7 @@ cat > "$DEPLOY_TMP/poopreminder/README_DEPLOY.txt" << 'EOF'
   sudo journalctl -u poopreminder -f
 
 直接运行：
-  NODE_ENV=production PORT=3000 node index.js
+  NODE_ENV=production JWT_SECRET=你的随机密钥 PORT=3000 node index.js
 
 文件说明：
   index.js           - 后端主程序
