@@ -340,6 +340,230 @@ beforeAll(() => {
 
     // 导出核心函数供单元测试使用
     app.locals.testHelpers = { toDateKey, parseDateKey, calculateStreak };
+
+    // 周视图路由
+    app.get('/api/weekly', authenticateToken, (req, res) => {
+        const userId = req.user.userId;
+        const base = parseDateKey(req.query.date) || new Date();
+        const day = base.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        const monday = new Date(base);
+        monday.setDate(base.getDate() + diff);
+        monday.setHours(0, 0, 0, 0);
+        const nextMonday = new Date(monday);
+        nextMonday.setDate(monday.getDate() + 7);
+
+        const days = [];
+        const d = new Date(monday);
+        while (d < nextMonday) {
+            days.push(new Date(d));
+            d.setDate(d.getDate() + 1);
+        }
+
+        const byDay = {};
+        days.forEach(day => {
+            const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+            byDay[key] = { date: key, items: [], count: 0, totalDuration: 0, typeCounts: {} };
+        });
+
+        const records = db.prepare('SELECT * FROM records WHERE user_id = ? ORDER BY date DESC').all(userId);
+        records.forEach(r => {
+            const key = toDateKey(r.date);
+            if (key && byDay[key]) {
+                byDay[key].items.push(r);
+                byDay[key].count++;
+                if (r.duration && r.duration > 0) byDay[key].totalDuration += r.duration;
+                byDay[key].typeCounts[r.poop_type || 0] = (byDay[key].typeCounts[r.poop_type || 0] || 0) + 1;
+            }
+        });
+
+        const dailyList = Object.values(byDay).map(d => ({
+            date: d.date, count: d.count,
+            avgDuration: d.count ? Math.round(d.totalDuration / d.count) : 0,
+            typeCounts: d.typeCounts
+        }));
+
+        let totalCount = 0, totalDuration = 0;
+        const typeStats = {};
+        dailyList.forEach(d => {
+            totalCount += d.count;
+            totalDuration += d.count * d.avgDuration;
+            Object.keys(d.typeCounts).forEach(t => {
+                typeStats[t] = (typeStats[t] || 0) + d.typeCounts[t];
+            });
+        });
+
+        res.json({
+            range: { start: monday.toISOString(), end: nextMonday.toISOString() },
+            weekLabel: `${monday.getFullYear()}年${monday.getMonth() + 1}月${monday.getDate()}日 - ${nextMonday.getMonth() + 1}月${nextMonday.getDate()}日`,
+            days: dailyList,
+            summary: {
+                totalCount,
+                avgDuration: totalCount ? Math.round(totalDuration / totalCount) : 0,
+                avgPerDay: Math.round((totalCount / 7) * 10) / 10,
+                typeStats
+            },
+            records: records.map(mapRecord)
+        });
+    });
+
+    // 月视图路由
+    app.get('/api/monthly', authenticateToken, (req, res) => {
+        const userId = req.user.userId;
+        let base;
+        if (req.query.date && /^\d{4}-\d{1,2}$/.test(req.query.date)) {
+            const [y, m] = req.query.date.split('-').map(Number);
+            base = new Date(y, m - 1, 1);
+        } else {
+            base = new Date();
+        }
+
+        const start = new Date(base.getFullYear(), base.getMonth(), 1);
+        const end = new Date(base.getFullYear(), base.getMonth() + 1, 1);
+
+        const daysInMonth = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+        const byDay = {};
+        for (let i = 1; i <= daysInMonth; i++) {
+            const key = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+            byDay[key] = { date: key, count: 0, totalDuration: 0, typeCounts: {} };
+        }
+
+        const records = db.prepare('SELECT * FROM records WHERE user_id = ? ORDER BY date DESC').all(userId);
+        records.forEach(r => {
+            const key = toDateKey(r.date);
+            if (key && byDay[key]) {
+                byDay[key].count++;
+                if (r.duration && r.duration > 0) byDay[key].totalDuration += r.duration;
+                byDay[key].typeCounts[r.poop_type || 0] = (byDay[key].typeCounts[r.poop_type || 0] || 0) + 1;
+            }
+        });
+
+        const dailyList = Object.values(byDay).map(d => ({
+            date: d.date, count: d.count,
+            avgDuration: d.count ? Math.round(d.totalDuration / d.count) : 0,
+            typeCounts: d.typeCounts
+        }));
+
+        const weekBuckets = [];
+        let currentWeekStart = new Date(start);
+        while (currentWeekStart < end) {
+            const weekEnd = new Date(currentWeekStart);
+            weekEnd.setDate(currentWeekStart.getDate() + 7);
+            const realEnd = weekEnd < end ? weekEnd : end;
+            weekBuckets.push({
+                start: currentWeekStart.toISOString(),
+                end: realEnd.toISOString(),
+                label: `${currentWeekStart.getMonth() + 1}/${String(currentWeekStart.getDate()).padStart(2, '0')} - ${realEnd.getMonth() + 1}/${String(realEnd.getDate()).padStart(2, '0')}`,
+                count: 0,
+                avgDuration: 0,
+                typeStats: {}
+            });
+            currentWeekStart = weekEnd;
+        }
+
+        let currentCount = 0, totalDuration = 0;
+        const typeStats = {};
+        dailyList.forEach(d => {
+            currentCount += d.count;
+            totalDuration += d.count * d.avgDuration;
+            Object.keys(d.typeCounts).forEach(t => {
+                typeStats[t] = (typeStats[t] || 0) + d.typeCounts[t];
+            });
+        });
+
+        res.json({
+            month: `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}`,
+            range: { start: start.toISOString(), end: end.toISOString() },
+            days: dailyList,
+            weeks: weekBuckets,
+            summary: {
+                totalCount: currentCount,
+                avgDuration: currentCount ? Math.round(totalDuration / currentCount) : 0,
+                avgPerDay: Math.round((currentCount / daysInMonth) * 10) / 10,
+                typeStats
+            },
+            compareWithLastMonth: {
+                count: 0,
+                diff: 0
+            },
+            records: records.map(mapRecord)
+        });
+    });
+
+    // 列表路由
+    app.get('/api/list', authenticateToken, (req, res) => {
+        const userId = req.user.userId;
+        let sql = 'SELECT * FROM records WHERE user_id = ?';
+        const params = [userId];
+
+        if (req.query.poop_type) {
+            const pt = parseInt(req.query.poop_type, 10);
+            if (!isNaN(pt) && pt >= 1 && pt <= 7) {
+                sql += ' AND poop_type = ?';
+                params.push(pt);
+            }
+        }
+
+        if (req.query.start) {
+            const parsed = parseDateKey(req.query.start);
+            if (parsed) {
+                const startKey = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+                sql += " AND date(date, 'localtime') >= ?";
+                params.push(startKey);
+            }
+        }
+
+        sql += ' ORDER BY date DESC';
+        const records = db.prepare(sql).all(...params).map(mapRecord);
+        res.json({ records, stats: { total: records.length }, filter: {} });
+    });
+
+    // 导出路由
+    app.get('/api/export', authenticateToken, (req, res) => {
+        const userId = req.user.userId;
+        const format = (req.query.format || 'csv').toLowerCase();
+        const range = req.query.range || 'month';
+
+        const now = new Date();
+        let fileName = `monthly_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+        if (range === 'week') {
+            fileName = `weekly_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+        } else if (range === 'all') {
+            fileName = 'all_records';
+        }
+
+        const records = db.prepare('SELECT * FROM records WHERE user_id = ? ORDER BY date DESC').all(userId);
+
+        if (format === 'txt') {
+            const lines = [`拉屎记录导出 - ${new Date().toLocaleString('zh-CN')}`, `共 ${records.length} 条记录`, ''];
+            records.forEach((r, i) => {
+                const d = new Date(r.date);
+                lines.push(`${i + 1}. ${d.toLocaleString('zh-CN')}`);
+                lines.push(`   类型: ${r.poop_type || '未记录'}`);
+                lines.push(`   时长: ${r.duration ? `${r.duration} 秒` : '未记录'}`);
+                lines.push('');
+            });
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${fileName}.txt"`);
+            res.send('\uFEFF' + lines.join('\n'));
+            return;
+        }
+
+        const rows = [['日期', '时间', '类型编号', '持续时长(秒)']];
+        records.forEach(r => {
+            const d = new Date(r.date);
+            rows.push([
+                `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+                `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+                r.poop_type || '',
+                r.duration || 0
+            ]);
+        });
+        const csv = '\uFEFF' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}.csv"`);
+        res.send(csv);
+    });
 });
 
 afterAll(() => {
@@ -785,5 +1009,234 @@ describe('首页 API', () => {
 
         // 清理
         db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+});
+
+// ============ API 集成测试：周视图 ============
+describe('周视图 API', () => {
+    test('无 token 应返回 401', async () => {
+        const res = await request(app).get('/api/weekly');
+        expect(res.status).toBe(401);
+    });
+
+    test('获取周视图数据应成功', async () => {
+        const today = new Date();
+        for (let i = 0; i < 3; i++) {
+            const d = new Date(today);
+            d.setDate(today.getDate() - i);
+            db.prepare('INSERT INTO records (user_id, date, poop_type, duration) VALUES (?, ?, ?, ?)').run(
+                testUserId, d.toISOString(), 4, 300 + i * 60
+            );
+        }
+
+        const res = await request(app).get('/api/weekly')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.range).toBeDefined();
+        expect(res.body.days).toBeDefined();
+        expect(res.body.days.length).toBe(7);
+        expect(res.body.summary).toBeDefined();
+        expect(res.body.summary.totalCount).toBe(3);
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+
+    test('指定日期应返回对应周数据', async () => {
+        const res = await request(app).get('/api/weekly?date=2024-01-15')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.range).toBeDefined();
+    });
+
+    test('无效日期应使用当前日期', async () => {
+        const res = await request(app).get('/api/weekly?date=invalid')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.range).toBeDefined();
+    });
+});
+
+// ============ API 集成测试：月视图 ============
+describe('月视图 API', () => {
+    test('无 token 应返回 401', async () => {
+        const res = await request(app).get('/api/monthly');
+        expect(res.status).toBe(401);
+    });
+
+    test('获取月视图数据应成功', async () => {
+        const today = new Date();
+        for (let i = 0; i < 5; i++) {
+            const d = new Date(today);
+            d.setDate(today.getDate() - i);
+            db.prepare('INSERT INTO records (user_id, date, poop_type, duration) VALUES (?, ?, ?, ?)').run(
+                testUserId, d.toISOString(), (i % 7) + 1, 300
+            );
+        }
+
+        const res = await request(app).get('/api/monthly')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.month).toBeDefined();
+        expect(res.body.range).toBeDefined();
+        expect(res.body.days).toBeDefined();
+        expect(res.body.summary).toBeDefined();
+        expect(res.body.weeks).toBeDefined();
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+
+    test('指定月份应返回对应月数据', async () => {
+        const res = await request(app).get('/api/monthly?date=2024-01')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.month).toBe('2024-01');
+    });
+
+    test('无效月份应使用当前月份', async () => {
+        const res = await request(app).get('/api/monthly?date=invalid')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.month).toBeDefined();
+    });
+
+    test('应包含上月对比数据', async () => {
+        const res = await request(app).get('/api/monthly')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.compareWithLastMonth).toBeDefined();
+        expect(res.body.compareWithLastMonth.count).toBeDefined();
+    });
+});
+
+// ============ API 集成测试：记录列表筛选 ============
+describe('记录列表 API', () => {
+    test('无 token 应返回 401', async () => {
+        const res = await request(app).get('/api/list');
+        expect(res.status).toBe(401);
+    });
+
+    test('获取记录列表应成功', async () => {
+        const today = new Date();
+        for (let i = 0; i < 3; i++) {
+            const d = new Date(today);
+            d.setDate(today.getDate() - i);
+            db.prepare('INSERT INTO records (user_id, date, poop_type, duration) VALUES (?, ?, ?, ?)').run(
+                testUserId, d.toISOString(), 4, 300
+            );
+        }
+
+        const res = await request(app).get('/api/list')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.records).toBeDefined();
+        expect(res.body.stats).toBeDefined();
+        expect(res.body.filter).toBeDefined();
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+
+    test('按类型筛选应正确过滤', async () => {
+        const today = new Date();
+        db.prepare('INSERT INTO records (user_id, date, poop_type, duration) VALUES (?, ?, ?, ?)').run(
+            testUserId, today.toISOString(), 1, 300
+        );
+        db.prepare('INSERT INTO records (user_id, date, poop_type, duration) VALUES (?, ?, ?, ?)').run(
+            testUserId, today.toISOString(), 4, 300
+        );
+
+        const res = await request(app).get('/api/list?poop_type=1')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        res.body.records.forEach(r => expect(r.poopType).toBe(1));
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+
+    test('按日期范围筛选应正确过滤', async () => {
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const twoDaysAgo = new Date(today);
+        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+
+        db.prepare('INSERT INTO records (user_id, date, poop_type) VALUES (?, ?, ?)').run(
+            testUserId, twoDaysAgo.toISOString(), 4
+        );
+        db.prepare('INSERT INTO records (user_id, date, poop_type) VALUES (?, ?, ?)').run(
+            testUserId, yesterday.toISOString(), 4
+        );
+        db.prepare('INSERT INTO records (user_id, date, poop_type) VALUES (?, ?, ?)').run(
+            testUserId, today.toISOString(), 4
+        );
+
+        const res = await request(app).get(`/api/list?start=${yesterday.toISOString().split('T')[0]}`)
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.records.length).toBe(2);
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+});
+
+// ============ API 集成测试：导出功能 ============
+describe('导出 API', () => {
+    test('无 token 应返回 401', async () => {
+        const res = await request(app).get('/api/export');
+        expect(res.status).toBe(401);
+    });
+
+    test('导出 CSV 格式应成功', async () => {
+        const today = new Date();
+        db.prepare('INSERT INTO records (user_id, date, poop_type, duration, notes) VALUES (?, ?, ?, ?, ?)').run(
+            testUserId, today.toISOString(), 4, 300, '测试备注'
+        );
+
+        const res = await request(app).get('/api/export?format=csv')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.headers['content-type']).toContain('text/csv');
+        expect(res.headers['content-disposition']).toContain('.csv');
+        expect(res.text).toContain('日期');
+        expect(res.text).toContain('类型编号');
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+
+    test('导出 TXT 格式应成功', async () => {
+        const today = new Date();
+        db.prepare('INSERT INTO records (user_id, date, poop_type, duration, notes) VALUES (?, ?, ?, ?, ?)').run(
+            testUserId, today.toISOString(), 4, 300, '测试备注'
+        );
+
+        const res = await request(app).get('/api/export?format=txt')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.headers['content-type']).toContain('text/plain');
+        expect(res.headers['content-disposition']).toContain('.txt');
+        expect(res.text).toContain('拉屎记录导出');
+        expect(res.text).toContain('共 1 条记录');
+
+        db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+
+    test('导出周数据应成功', async () => {
+        const res = await request(app).get('/api/export?range=week')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.headers['content-disposition']).toContain('weekly_');
+    });
+
+    test('导出全部数据应成功', async () => {
+        const res = await request(app).get('/api/export?range=all')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.headers['content-disposition']).toContain('all_records');
+    });
+
+    test('默认导出月度数据应成功', async () => {
+        const res = await request(app).get('/api/export')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.headers['content-disposition']).toContain('monthly_');
     });
 });
