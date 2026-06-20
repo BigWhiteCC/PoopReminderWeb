@@ -60,7 +60,7 @@ if [ -d /opt/poopreminder ]; then
 fi
 rm -rf /opt/poopreminder
 mkdir -p /opt/poopreminder
-tar xzf /tmp/poopreminder-deploy-*.tar.gz -C /opt/poopreminder --strip-components=1
+ARCHIVE=$(ls -t /tmp/poopreminder-deploy-*.tar.gz 2>/dev/null | head -1) && tar xzf "$ARCHIVE" -C /opt/poopreminder --strip-components=1
 if [ -f /tmp/poopreminder.db.bak ]; then
     mv /tmp/poopreminder.db.bak /opt/poopreminder/poopreminder.db
 fi
