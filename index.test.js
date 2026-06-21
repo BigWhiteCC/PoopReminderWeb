@@ -159,7 +159,7 @@ beforeAll(() => {
         let streak = 0;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        for (let i = 0; i < 3650; i++) {
+        for (let i = 0; i < 365; i++) {
             const d = new Date(today);
             d.setDate(today.getDate() - i);
             const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -301,7 +301,20 @@ beforeAll(() => {
             }
             const notes = req.body.notes !== undefined ? req.body.notes.toString().slice(0, 500) : existing.notes;
             const status = req.body.status !== undefined ? req.body.status.toString().slice(0, 50) : existing.status;
-            db.prepare('UPDATE records SET notes=?, poop_type=?, duration=?, status=? WHERE id=? AND user_id=?').run(notes, poopType, duration, status, id, userId);
+            
+            let recordDate = existing.date;
+            if (req.body.date) {
+                const parsed = parseDateKey(req.body.date);
+                if (!parsed) return res.status(400).json({ error: '日期格式无效' });
+                const now = new Date();
+                const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+                if (parsed.getTime() > endOfToday.getTime()) {
+                    return res.status(400).json({ error: '日期不能晚于今天' });
+                }
+                recordDate = parsed.toISOString();
+            }
+            
+            db.prepare('UPDATE records SET date=?, notes=?, poop_type=?, duration=?, status=? WHERE id=? AND user_id=?').run(recordDate, notes, poopType, duration, status, id, userId);
             const updated = db.prepare('SELECT * FROM records WHERE id = ?').get(id);
             res.json({ success: true, record: mapRecord(updated) });
         } catch (err) { res.status(500).json({ error: '更新失败' }); }
@@ -332,8 +345,14 @@ beforeAll(() => {
     });
 
     app.delete('/api/admin/record/:id', authenticateToken, requireAdmin, (req, res) => {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ error: '无效的记录ID' });
+
         try {
-            db.prepare('DELETE FROM records WHERE id = ?').run(req.params.id);
+            const record = db.prepare('SELECT id FROM records WHERE id = ?').get(id);
+            if (!record) return res.status(404).json({ error: '记录不存在' });
+            
+            db.prepare('DELETE FROM records WHERE id = ?').run(id);
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: '删除失败' }); }
     });
@@ -658,6 +677,39 @@ describe('记录 API - 数据校验', () => {
         expect(res.status).toBe(200);
         expect(res.body.record.duration).toBe(0);
     });
+
+    test('更新记录：未来日期应返回 400', async () => {
+        const result = db.prepare('INSERT INTO records (user_id, date, poop_type, created_at) VALUES (?, ?, ?, ?)').run(
+            testUserId, new Date().toISOString(), 4, new Date().toISOString()
+        );
+        const recordId = result.lastInsertRowid;
+        
+        const future = new Date();
+        future.setDate(future.getDate() + 1);
+        
+        const res = await request(app).put(`/api/record/${recordId}`)
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ date: future.toISOString() });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('不能晚于今天');
+        
+        db.prepare('DELETE FROM records WHERE id = ?').run(recordId);
+    });
+
+    test('更新记录：无效日期格式应返回 400', async () => {
+        const result = db.prepare('INSERT INTO records (user_id, date, poop_type, created_at) VALUES (?, ?, ?, ?)').run(
+            testUserId, new Date().toISOString(), 4, new Date().toISOString()
+        );
+        const recordId = result.lastInsertRowid;
+        
+        const res = await request(app).put(`/api/record/${recordId}`)
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ date: 'invalid-date' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('日期格式无效');
+        
+        db.prepare('DELETE FROM records WHERE id = ?').run(recordId);
+    });
 });
 
 describe('记录 API - 权限校验', () => {
@@ -747,6 +799,20 @@ describe('管理员 API - 权限校验', () => {
         // 验证已删除
         const record = db.prepare('SELECT * FROM records WHERE id = ?').get(recordId);
         expect(record).toBeUndefined();
+    });
+
+    test('管理员删除无效ID应返回 400', async () => {
+        const res = await request(app).delete('/api/admin/record/invalid')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('无效的记录ID');
+    });
+
+    test('管理员删除不存在的记录应返回 404', async () => {
+        const res = await request(app).delete('/api/admin/record/999999')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(404);
+        expect(res.body.error).toContain('记录不存在');
     });
 
     test('无认证访问管理员接口应返回 401', async () => {

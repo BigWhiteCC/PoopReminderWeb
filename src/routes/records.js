@@ -123,7 +123,13 @@ router.put('/:id', authenticateToken, (req, res) => {
         let recordDate = existing.date;
         if (req.body.date) {
             const parsed = parseDateKey(req.body.date);
-            if (parsed) recordDate = parsed.toISOString();
+            if (!parsed) return res.status(400).json({ error: '日期格式无效' });
+            const now = new Date();
+            const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+            if (parsed.getTime() > endOfToday.getTime()) {
+                return res.status(400).json({ error: '日期不能晚于今天' });
+            }
+            recordDate = parsed.toISOString();
         }
 
         db.prepare(`

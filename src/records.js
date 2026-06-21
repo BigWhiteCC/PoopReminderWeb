@@ -35,7 +35,7 @@ function calculateStreak(userId) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    for (let i = 0; i < 3650; i++) {
+    for (let i = 0; i < 365; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() - i);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
