@@ -127,8 +127,9 @@ router.delete('/record/:id', authenticateToken, requireAdmin, (req, res) => {
     const db = getDb();
     try {
         const record = db.prepare('SELECT id, user_id FROM records WHERE id = ?').get(req.params.id);
+        if (!record) return res.status(404).json({ error: '记录不存在' });
         db.prepare('DELETE FROM records WHERE id = ?').run(req.params.id);
-        addAuditLog(req.user.userId, 'DELETE_RECORD', 'record', req.params.id, `删除用户${record ? record.user_id : ''}的记录`);
+        addAuditLog(req.user.userId, 'DELETE_RECORD', 'record', req.params.id, `删除用户${record.user_id}的记录`);
         res.json({ success: true });
     } catch (err) {
         const e = handleError(err, 'adminDeleteRecord');
@@ -141,6 +142,10 @@ router.post('/user/:id/password', authenticateToken, requireAdmin, (req, res) =>
     const db = getDb();
     const userId = parseInt(req.params.id);
     const { newPassword } = req.body;
+
+    if (isNaN(userId) || userId <= 0) {
+        return res.status(400).json({ error: '无效的用户ID' });
+    }
 
     if (!newPassword || newPassword.length < 6) {
         return res.status(400).json({ error: '新密码至少6位' });
@@ -167,6 +172,10 @@ router.delete('/user/:id', authenticateToken, requireAdmin, (req, res) => {
     const db = getDb();
     const userId = parseInt(req.params.id);
 
+    if (isNaN(userId) || userId <= 0) {
+        return res.status(400).json({ error: '无效的用户ID' });
+    }
+
     try {
         const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(userId);
         if (!user) return res.status(404).json({ error: '用户不存在' });
@@ -190,6 +199,10 @@ router.delete('/user/:id', authenticateToken, requireAdmin, (req, res) => {
 router.post('/user/:id/toggle', authenticateToken, requireAdmin, (req, res) => {
     const db = getDb();
     const userId = parseInt(req.params.id);
+
+    if (isNaN(userId) || userId <= 0) {
+        return res.status(400).json({ error: '无效的用户ID' });
+    }
 
     try {
         const user = db.prepare('SELECT id, username, role, enabled FROM users WHERE id = ?').get(userId);

@@ -71,8 +71,8 @@ function authenticateToken(req, res, next) {
             if (!row) return res.status(403).json({ error: 'User not found' });
             if (row.password_changed_at && user.iat) {
                 const changedAt = new Date(row.password_changed_at).getTime();
+                if (isNaN(changedAt)) return res.status(500).json({ error: 'Authentication failed' });
                 const issuedAt = user.iat * 1000;
-                // 加 1 秒容差：JWT iat 是秒级精度，password_changed_at 是毫秒级 ISO 字符串
                 if (issuedAt + 1000 < changedAt) {
                     return res.status(403).json({ error: 'Token expired due to password change' });
                 }
