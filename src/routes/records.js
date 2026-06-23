@@ -123,7 +123,13 @@ router.put('/:id', authenticateToken, (req, res) => {
         let recordDate = existing.date;
         if (req.body.date) {
             const parsed = parseDateKey(req.body.date);
-            if (parsed) recordDate = parsed.toISOString();
+            if (!parsed) return res.status(400).json({ error: '日期格式无效' });
+            const now = new Date();
+            const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+            if (parsed.getTime() > endOfToday.getTime()) {
+                return res.status(400).json({ error: '日期不能晚于今天' });
+            }
+            recordDate = parsed.toISOString();
         }
 
         db.prepare(`
@@ -162,7 +168,9 @@ router.delete('/:id', authenticateToken, (req, res) => {
 router.get('/weekly', authenticateToken, (req, res) => {
     const userId = req.user.userId;
     const base = parseDateKey(req.query.date) || new Date();
-    const { start, end } = getWeekRange(base);
+    const weekRange = getWeekRange(base);
+    if (!weekRange) return res.status(400).json({ error: '无效的日期参数' });
+    const { start, end } = weekRange;
     const filter = parseFilterQuery(req.query);
 
     const records = queryRecords(userId, {
@@ -190,6 +198,7 @@ router.get('/weekly', authenticateToken, (req, res) => {
 
     const dailyList = Object.values(byDay).map(d => ({
         date: d.date, count: d.count,
+        totalDuration: d.totalDuration,
         avgDuration: d.count ? Math.round(d.totalDuration / d.count) : 0,
         typeCounts: d.typeCounts
     }));
@@ -198,7 +207,7 @@ router.get('/weekly', authenticateToken, (req, res) => {
     const typeStats = {};
     dailyList.forEach(d => {
         totalCount += d.count;
-        totalDuration += d.count * d.avgDuration;
+        totalDuration += d.totalDuration;
         Object.keys(d.typeCounts).forEach(t => {
             typeStats[t] = (typeStats[t] || 0) + d.typeCounts[t];
         });
@@ -224,6 +233,9 @@ router.get('/monthly', authenticateToken, (req, res) => {
     let base;
     if (req.query.date && /^\d{4}-\d{1,2}$/.test(req.query.date)) {
         const [y, m] = req.query.date.split('-').map(Number);
+        if (m < 1 || m > 12 || y < 1970 || y > 2100) {
+            return res.status(400).json({ error: '无效的月份参数' });
+        }
         base = new Date(y, m - 1, 1);
     } else {
         base = new Date();
@@ -257,6 +269,7 @@ router.get('/monthly', authenticateToken, (req, res) => {
 
     const dailyList = Object.values(byDay).map(d => ({
         date: d.date, count: d.count,
+        totalDuration: d.totalDuration,
         avgDuration: d.count ? Math.round(d.totalDuration / d.count) : 0,
         typeCounts: d.typeCounts
     }));
@@ -274,7 +287,7 @@ router.get('/monthly', authenticateToken, (req, res) => {
             const dayDate = new Date(d.date);
             if (dayDate >= currentWeekStart && dayDate < realEnd) {
                 count += d.count;
-                totalDur += d.count * d.avgDuration;
+                totalDur += d.totalDuration;
                 Object.keys(d.typeCounts).forEach(t => {
                     wkTypeStats[t] = (wkTypeStats[t] || 0) + d.typeCounts[t];
                 });
@@ -300,7 +313,7 @@ router.get('/monthly', authenticateToken, (req, res) => {
     const typeStats = {};
     dailyList.forEach(d => {
         currentCount += d.count;
-        totalDuration += d.count * d.avgDuration;
+        totalDuration += d.totalDuration;
         Object.keys(d.typeCounts).forEach(t => {
             typeStats[t] = (typeStats[t] || 0) + d.typeCounts[t];
         });
@@ -350,6 +363,7 @@ router.get('/export', authenticateToken, (req, res) => {
     let start, end, fileName;
     if (range === 'week') {
         const wr = getWeekRange(now);
+        if (!wr) return res.status(400).json({ error: '无效的日期范围' });
         start = wr.start; end = wr.end;
         fileName = `weekly_${start.getFullYear()}${String(start.getMonth() + 1).padStart(2, '0')}${String(start.getDate()).padStart(2, '0')}`;
     } else if (range === 'all') {
