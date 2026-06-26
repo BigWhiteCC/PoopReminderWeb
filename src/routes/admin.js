@@ -127,8 +127,9 @@ router.delete('/record/:id', authenticateToken, requireAdmin, (req, res) => {
     const db = getDb();
     try {
         const record = db.prepare('SELECT id, user_id FROM records WHERE id = ?').get(req.params.id);
+        if (!record) return res.status(404).json({ error: '记录不存在' });
         db.prepare('DELETE FROM records WHERE id = ?').run(req.params.id);
-        addAuditLog(req.user.userId, 'DELETE_RECORD', 'record', req.params.id, `删除用户${record ? record.user_id : ''}的记录`);
+        addAuditLog(req.user.userId, 'DELETE_RECORD', 'record', req.params.id, `删除用户${record.user_id}的记录`);
         res.json({ success: true });
     } catch (err) {
         const e = handleError(err, 'adminDeleteRecord');
@@ -173,10 +174,13 @@ router.delete('/user/:id', authenticateToken, requireAdmin, (req, res) => {
         if (userId === req.user.userId) return res.status(400).json({ error: '不能删除自己' });
         if (user.role === 'admin') return res.status(400).json({ error: '不能删除管理员账号' });
 
-        db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
-        db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
-        db.prepare('DELETE FROM login_logs WHERE user_id = ?').run(userId);
-        db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+        db.transaction(() => {
+            db.prepare('DELETE FROM admin_audit_logs WHERE admin_id = ?').run(userId);
+            db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM login_logs WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+        })();
 
         addAuditLog(req.user.userId, 'DELETE_USER', 'user', userId, `删除用户: ${user.username}`);
         res.json({ success: true, message: `用户 ${user.username} 已删除` });

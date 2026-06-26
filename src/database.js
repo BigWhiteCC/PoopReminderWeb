@@ -11,6 +11,7 @@ function getDb() {
     if (!db) {
         db = new Database('poopreminder.db');
         db.pragma('journal_mode = WAL');
+        db.pragma('busy_timeout = 5000');
     }
     return db;
 }
