@@ -126,11 +126,18 @@ router.get('/stats', authenticateToken, requireAdmin, (req, res) => {
 router.delete('/record/:id', authenticateToken, requireAdmin, (req, res) => {
     const db = getDb();
     try {
+        db.prepare('BEGIN').run();
         const record = db.prepare('SELECT id, user_id FROM records WHERE id = ?').get(req.params.id);
+        if (!record) {
+            db.prepare('ROLLBACK').run();
+            return res.status(404).json({ error: '记录不存在' });
+        }
         db.prepare('DELETE FROM records WHERE id = ?').run(req.params.id);
-        addAuditLog(req.user.userId, 'DELETE_RECORD', 'record', req.params.id, `删除用户${record ? record.user_id : ''}的记录`);
+        db.prepare('COMMIT').run();
+        addAuditLog(req.user.userId, 'DELETE_RECORD', 'record', req.params.id, `删除用户${record.user_id}的记录`);
         res.json({ success: true });
     } catch (err) {
+        try { db.prepare('ROLLBACK').run(); } catch (e) {}
         const e = handleError(err, 'adminDeleteRecord');
         res.status(e.status).json({ error: e.message });
     }

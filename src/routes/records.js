@@ -350,7 +350,14 @@ router.get('/export', authenticateToken, (req, res) => {
     let start, end, fileName;
     if (range === 'week') {
         const wr = getWeekRange(now);
-        start = wr.start; end = wr.end;
+        if (!wr) {
+            start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + 1);
+            end = new Date(start);
+            end.setDate(start.getDate() + 7);
+        } else {
+            start = wr.start;
+            end = wr.end;
+        }
         fileName = `weekly_${start.getFullYear()}${String(start.getMonth() + 1).padStart(2, '0')}${String(start.getDate()).padStart(2, '0')}`;
     } else if (range === 'all') {
         start = null; end = null; fileName = 'all_records';

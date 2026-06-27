@@ -8,16 +8,16 @@ function queryRecords(userId, { start, end, poopType } = {}) {
     const db = getDb();
 
     const startKey = start ? (start instanceof Date
-        ? `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+        ? `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}-${String(start.getUTCDate()).padStart(2, '0')}`
         : toDateKey(start)) : null;
     const endKey = end ? (end instanceof Date
-        ? `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+        ? `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, '0')}-${String(end.getUTCDate()).padStart(2, '0')}`
         : toDateKey(end)) : null;
 
     const conds = ['r.user_id = ?'];
     const params = [userId];
-    if (startKey) { conds.push("date(r.date, 'localtime') >= ?"); params.push(startKey); }
-    if (endKey) { conds.push("date(r.date, 'localtime') < ?"); params.push(endKey); }
+    if (startKey) { conds.push("date(r.date) >= ?"); params.push(startKey); }
+    if (endKey) { conds.push("date(r.date) < ?"); params.push(endKey); }
     if (poopType) { conds.push('r.poop_type = ?'); params.push(poopType); }
 
     const sql = `SELECT r.* FROM records r WHERE ${conds.join(' AND ')} ORDER BY COALESCE(r.created_at, r.date) DESC, r.date DESC`;
