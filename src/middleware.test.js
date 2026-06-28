@@ -1,11 +1,38 @@
 process.env.JWT_SECRET = 'test-secret-key';
 
+jest.mock('./database', () => {
+    let mockDb;
+    return {
+        getDb: () => {
+            if (!mockDb) {
+                const Database = require('better-sqlite3');
+                mockDb = new Database(':memory:');
+                mockDb.exec(`
+                    CREATE TABLE IF NOT EXISTS users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username TEXT NOT NULL UNIQUE,
+                        email TEXT NOT NULL UNIQUE,
+                        password TEXT NOT NULL,
+                        role TEXT NOT NULL DEFAULT 'user',
+                        enabled INTEGER DEFAULT 1,
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        password_changed_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    );
+                `);
+            }
+            return mockDb;
+        }
+    };
+});
+
 const {
     validateUsername,
     validateEmail,
     validatePassword,
     handleError,
-    escapeHtml
+    escapeHtml,
+    authenticateToken,
+    requireAdmin
 } = require('./middleware');
 
 describe('validateUsername - 用户名验证', () => {
@@ -176,5 +203,133 @@ describe('escapeHtml - HTML转义', () => {
         expect(escaped).not.toContain('<script>');
         expect(escaped).not.toContain('</script>');
         expect(escaped).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
+    });
+});
+
+describe('authenticateToken - 认证中间件', () => {
+    const jwt = require('jsonwebtoken');
+    const { getDb } = require('./database');
+    let db;
+    let testUserId;
+
+    beforeAll(() => {
+        db = getDb();
+        const result = db.prepare('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)').run('testuser', 'test@test.com', 'hashed', 'user');
+        testUserId = result.lastInsertRowid;
+    });
+
+    test('无 token 应返回 401', (done) => {
+        const req = { headers: {} };
+        const res = {
+            status: (code) => {
+                expect(code).toBe(401);
+                return { json: (data) => {
+                    expect(data.error).toBe('Unauthorized');
+                    done();
+                }};
+            }
+        };
+        authenticateToken(req, res, () => {});
+    });
+
+    test('无效 token 应返回 403', (done) => {
+        const req = { headers: { authorization: 'Bearer invalidtoken' } };
+        const res = {
+            status: (code) => {
+                expect(code).toBe(403);
+                return { json: (data) => {
+                    expect(data.error).toBe('Invalid token');
+                    done();
+                }};
+            }
+        };
+        authenticateToken(req, res, () => {});
+    });
+
+    test('有效 token 应调用 next', (done) => {
+        const token = jwt.sign({ userId: testUserId, username: 'testuser', role: 'user' }, process.env.JWT_SECRET);
+        const req = { headers: { authorization: `Bearer ${token}` } };
+        const res = {
+            status: (code) => ({ json: () => {} })
+        };
+        authenticateToken(req, res, () => {
+            expect(req.user).toBeDefined();
+            expect(req.user.userId).toBe(testUserId);
+            done();
+        });
+    });
+
+    test('密码修改后旧 token 应失效', (done) => {
+        const token = jwt.sign({ userId: testUserId, username: 'testuser', role: 'user' }, process.env.JWT_SECRET);
+        
+        const futureTime = new Date(Date.now() + 10000).toISOString();
+        db.prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').run(futureTime, testUserId);
+
+        const req = { headers: { authorization: `Bearer ${token}` } };
+        const res = {
+            status: (code) => {
+                expect(code).toBe(403);
+                return { json: (data) => {
+                    expect(data.error).toBe('Token expired due to password change');
+                    done();
+                }};
+            }
+        };
+        authenticateToken(req, res, () => {
+            done(new Error('不应调用 next'));
+        });
+    });
+
+    test('用户不存在应返回 403', (done) => {
+        const token = jwt.sign({ userId: 99999, username: 'nonexistent', role: 'user' }, process.env.JWT_SECRET);
+        const req = { headers: { authorization: `Bearer ${token}` } };
+        const res = {
+            status: (code) => {
+                expect(code).toBe(403);
+                return { json: (data) => {
+                    expect(data.error).toBe('User not found');
+                    done();
+                }};
+            }
+        };
+        authenticateToken(req, res, () => {});
+    });
+});
+
+describe('requireAdmin - 管理员权限中间件', () => {
+    test('普通用户应返回 403', (done) => {
+        const req = { user: { role: 'user' } };
+        const res = {
+            status: (code) => {
+                expect(code).toBe(403);
+                return { json: (data) => {
+                    expect(data.error).toBe('需要管理员权限');
+                    done();
+                }};
+            }
+        };
+        requireAdmin(req, res, () => {});
+    });
+
+    test('管理员应调用 next', (done) => {
+        const req = { user: { role: 'admin' } };
+        const res = {};
+        requireAdmin(req, res, () => {
+            done();
+        });
+    });
+
+    test('无 user 对象应返回 403', (done) => {
+        const req = {};
+        const res = {
+            status: (code) => {
+                expect(code).toBe(403);
+                return { json: (data) => {
+                    expect(data.error).toBe('需要管理员权限');
+                    done();
+                }};
+            }
+        };
+        requireAdmin(req, res, () => {});
     });
 });

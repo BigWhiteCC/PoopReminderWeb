@@ -45,7 +45,7 @@ app.get('/health', (req, res) => {
 
 // -------- 路由注册 --------
 app.use('/api', require('./src/routes/auth'));
-app.use('/api/record', require('./src/routes/records'));
+app.use('/api/record', require('./src/routes/records').router);
 app.use('/api/settings', require('./src/routes/settings'));
 app.use('/api/admin', require('./src/routes/admin'));
 

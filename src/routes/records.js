@@ -424,4 +424,4 @@ function formatDurationSec(seconds) {
     return rs > 0 ? `${m} 分 ${rs} 秒` : `${m} 分`;
 }
 
-module.exports = router;
+module.exports = { router, formatDurationSec };

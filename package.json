@@ -35,6 +35,7 @@
     "testMatch": ["**/*.test.js"],
     "collectCoverageFrom": ["index.js", "frontend/src/services/api.js"],
     "coverageDirectory": "coverage",
-    "coverageReporters": ["text", "lcov"]
+    "coverageReporters": ["text", "lcov"],
+    "maxWorkers": 1
   }
 }
