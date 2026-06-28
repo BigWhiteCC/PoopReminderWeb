@@ -3,6 +3,29 @@ set -e
 DEST="$1"
 DEPLOY_DIR="$2"
 SSH_PORT="${3:-22}"
+JWT_SECRET="$4"
+
+# 检查必要参数
+if [ -z "$DEST" ]; then
+    echo "用法: $0 <目标主机> [部署目录] [SSH端口] <JWT密钥>"
+    echo "示例: $0 root@server.com /opt/poopreminder 22 my_secure_random_secret"
+    exit 1
+fi
+
+# 检查 JWT_SECRET
+if [ -z "$JWT_SECRET" ]; then
+    echo "错误: 必须提供 JWT_SECRET 参数（作为第4个参数）"
+    echo "生成随机密钥: openssl rand -hex 48"
+    exit 1
+fi
+
+# 验证 JWT_SECRET 不是默认的可预测值
+if [ "$JWT_SECRET" = "please_replace_this_with_a_secure_random_string" ]; then
+    echo "错误: 请勿使用默认的 JWT_SECRET 值！"
+    echo "生成安全的随机密钥: openssl rand -hex 48"
+    exit 1
+fi
+
 echo "Deploying to $DEST:$DEPLOY_DIR"
 
 if [ ! -f "index.js" ] || [ ! -d "frontend/dist" ]; then
@@ -26,7 +49,8 @@ PORT=${PORT:-3000} npm start
 SHEOF
 chmod +x "$DEPLOY_TMP/poopreminder/start.sh"
 
-cat > "$DEPLOY_TMP/poopreminder/poopreminder.service" << 'SVCEOF'
+# 使用 heredoc 替换占位符来动态生成 service 文件
+cat > "$DEPLOY_TMP/poopreminder/poopreminder.service" << EOF
 [Unit]
 Description=PoopReminder Web Application
 After=network.target
@@ -35,13 +59,13 @@ Type=simple
 WorkingDirectory=/opt/poopreminder
 Environment=NODE_ENV=production
 Environment=PORT=3000
-Environment=JWT_SECRET=please_replace_this_with_a_secure_random_string
+Environment=JWT_SECRET=${JWT_SECRET}
 ExecStart=/usr/bin/node /opt/poopreminder/index.js
 Restart=on-failure
 RestartSec=5
 [Install]
 WantedBy=multi-user.target
-SVCEOF
+EOF
 
 ARCHIVE="/tmp/poopreminder-deploy-$(date +%Y%m%d_%H%M%S).tar.gz"
 tar czf "$ARCHIVE" -C "$DEPLOY_TMP" poopreminder

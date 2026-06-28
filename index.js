@@ -18,7 +18,13 @@ const port = process.env.PORT || 3000;
 
 // -------- 安全与解析 --------
 securityHeaders(app);
-if (IS_DEV) app.use(cors());
+if (IS_DEV) {
+    // 开发模式下限制 CORS 来源，避免安全风险
+    app.use(cors({
+        origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+        credentials: true
+    }));
+}
 app.use(express.json({ limit: '100kb' }));
 const { authLimiter, generalLimiter } = setupRateLimiters();
 app.use(generalLimiter);
