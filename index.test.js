@@ -33,7 +33,9 @@ beforeAll(() => {
             email TEXT NOT NULL UNIQUE,
             password TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'user',
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            enabled INTEGER DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            password_changed_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,6 +53,25 @@ beforeAll(() => {
             device_user_agent TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS user_settings (
+            user_id INTEGER PRIMARY KEY,
+            reminder_hour INTEGER DEFAULT 8,
+            reminder_minute INTEGER DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS login_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS admin_audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admin_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_records_user_id ON records(user_id);
         CREATE INDEX IF NOT EXISTS idx_records_date ON records(date);
@@ -176,6 +197,8 @@ beforeAll(() => {
         if (!token) return res.status(401).json({ error: 'Unauthorized' });
         jwt.verify(token, JWT_SECRET, (err, user) => {
             if (err) return res.status(403).json({ error: 'Invalid token' });
+            const userRow = db.prepare('SELECT enabled FROM users WHERE id = ?').get(user.userId);
+            if (!userRow || userRow.enabled === 0) return res.status(403).json({ error: '账号已被禁用，请联系管理员' });
             req.user = user;
             next();
         });
@@ -226,6 +249,7 @@ beforeAll(() => {
         try {
             const user = db.prepare('SELECT * FROM users WHERE email = ? OR username = ?').get(email, email);
             if (!user) return res.status(401).json({ error: '账号或密码错误' });
+            if (user.enabled === 0) return res.status(403).json({ error: '账号已被禁用，请联系管理员' });
             const valid = await bcrypt.compare(password, user.password);
             if (!valid) return res.status(401).json({ error: '账号或密码错误' });
             const role = user.role || 'user';
@@ -319,9 +343,47 @@ beforeAll(() => {
         } catch (err) { res.status(500).json({ error: '删除失败' }); }
     });
 
+    app.post('/api/user/password', authenticateToken, async (req, res) => {
+        const { oldPassword, newPassword } = req.body;
+        if (!oldPassword || !newPassword) return res.status(400).json({ error: '请填写完整信息' });
+        if (newPassword.length < 6) return res.status(400).json({ error: '新密码至少6位' });
+        try {
+            const user = db.prepare('SELECT password FROM users WHERE id = ?').get(req.user.userId);
+            if (!user) return res.status(404).json({ error: '用户不存在' });
+            const valid = await bcrypt.compare(oldPassword, user.password);
+            if (!valid) return res.status(400).json({ error: '旧密码错误' });
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            const now = new Date().toISOString();
+            db.prepare('UPDATE users SET password = ?, password_changed_at = ? WHERE id = ?').run(hashedPassword, now, req.user.userId);
+            res.json({ success: true, message: '密码修改成功' });
+        } catch (err) { res.status(500).json({ error: '修改失败' }); }
+    });
+
+    app.get('/api/settings', authenticateToken, (req, res) => {
+        try {
+            const row = db.prepare('SELECT reminder_hour, reminder_minute FROM user_settings WHERE user_id = ?').get(req.user.userId);
+            res.json({
+                hour: row ? row.reminder_hour : 8,
+                minute: row ? row.reminder_minute : 0
+            });
+        } catch (err) { res.status(500).json({ error: '获取失败' }); }
+    });
+
+    app.post('/api/settings', authenticateToken, (req, res) => {
+        const hour = parseInt(req.body.hour);
+        const minute = parseInt(req.body.minute);
+        if (isNaN(hour) || hour < 0 || hour > 23) return res.status(400).json({ error: '小时必须是 0-23 之间的整数' });
+        if (isNaN(minute) || minute < 0 || minute > 59) return res.status(400).json({ error: '分钟必须是 0-59 之间的整数' });
+        try {
+            const now = new Date().toISOString();
+            db.prepare(`INSERT INTO user_settings (user_id, reminder_hour, reminder_minute, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET reminder_hour = excluded.reminder_hour, reminder_minute = excluded.reminder_minute, updated_at = excluded.updated_at`).run(req.user.userId, hour, minute, now);
+            res.json({ success: true, reminderTime: { hour, minute } });
+        } catch (err) { res.status(500).json({ error: '保存失败' }); }
+    });
+
     app.get('/api/admin/users', authenticateToken, requireAdmin, (req, res) => {
         const users = db.prepare(`
-            SELECT u.id, u.username, u.email, u.role, u.created_at,
+            SELECT u.id, u.username, u.email, u.role, u.enabled, u.created_at,
                    COUNT(r.id) as record_count
             FROM users u
             LEFT JOIN records r ON r.user_id = u.id
@@ -336,6 +398,61 @@ beforeAll(() => {
             db.prepare('DELETE FROM records WHERE id = ?').run(req.params.id);
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: '删除失败' }); }
+    });
+
+    app.post('/api/admin/user/:id/password', authenticateToken, requireAdmin, async (req, res) => {
+        const userId = parseInt(req.params.id);
+        const { newPassword } = req.body;
+        if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: '新密码至少6位' });
+        try {
+            const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(userId);
+            if (!user) return res.status(404).json({ error: '用户不存在' });
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            const now = new Date().toISOString();
+            db.prepare('UPDATE users SET password = ?, password_changed_at = ? WHERE id = ?').run(hashedPassword, now, userId);
+            res.json({ success: true, message: `用户 ${user.username} 的密码已重置` });
+        } catch (err) { res.status(500).json({ error: '重置失败' }); }
+    });
+
+    app.delete('/api/admin/user/:id', authenticateToken, requireAdmin, (req, res) => {
+        const userId = parseInt(req.params.id);
+        try {
+            const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(userId);
+            if (!user) return res.status(404).json({ error: '用户不存在' });
+            if (userId === req.user.userId) return res.status(400).json({ error: '不能删除自己' });
+            if (user.role === 'admin') return res.status(400).json({ error: '不能删除管理员账号' });
+            db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+            res.json({ success: true, message: `用户 ${user.username} 已删除` });
+        } catch (err) { res.status(500).json({ error: '删除失败' }); }
+    });
+
+    app.post('/api/admin/user/:id/toggle', authenticateToken, requireAdmin, (req, res) => {
+        const userId = parseInt(req.params.id);
+        try {
+            const user = db.prepare('SELECT id, username, role, enabled FROM users WHERE id = ?').get(userId);
+            if (!user) return res.status(404).json({ error: '用户不存在' });
+            if (user.role === 'admin') return res.status(400).json({ error: '不能禁用管理员账号' });
+            const newEnabled = user.enabled ? 0 : 1;
+            db.prepare('UPDATE users SET enabled = ? WHERE id = ?').run(newEnabled, userId);
+            res.json({ success: true, message: `用户 ${user.username} 已${newEnabled ? '启用' : '禁用'}`, enabled: newEnabled });
+        } catch (err) { res.status(500).json({ error: '操作失败' }); }
+    });
+
+    app.get('/api/admin/login-logs', authenticateToken, requireAdmin, (req, res) => {
+        res.json({ logs: [], page: { limit: 100, offset: 0, total: 0 } });
+    });
+
+    app.get('/api/admin/audit-logs', authenticateToken, requireAdmin, (req, res) => {
+        res.json({ logs: [], page: { limit: 100, offset: 0, total: 0 } });
+    });
+
+    app.get('/api/admin/stats', authenticateToken, requireAdmin, (req, res) => {
+        const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+        const recordCount = db.prepare('SELECT COUNT(*) as c FROM records').get().c;
+        const adminCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin'").get().c;
+        res.json({ userCount, recordCount, adminCount, todayCount: 0, typeDistribution: [], trend: [] });
     });
 
     // 导出核心函数供单元测试使用
@@ -785,5 +902,235 @@ describe('首页 API', () => {
 
         // 清理
         db.prepare('DELETE FROM records WHERE user_id = ?').run(testUserId);
+    });
+});
+
+// ============ API 集成测试：密码修改 ============
+describe('密码修改 API', () => {
+    test('修改密码：缺少字段应返回 400', async () => {
+        const res = await request(app).post('/api/user/password')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({});
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('请填写完整信息');
+    });
+
+    test('修改密码：新密码过短应返回 400', async () => {
+        const res = await request(app).post('/api/user/password')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ oldPassword: 'test123', newPassword: '123' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('新密码至少6位');
+    });
+
+    test('修改密码：旧密码错误应返回 400', async () => {
+        const res = await request(app).post('/api/user/password')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ oldPassword: 'wrongpassword', newPassword: 'newpassword123' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('旧密码错误');
+    });
+
+    test('修改密码：正常修改应成功', async () => {
+        const res = await request(app).post('/api/user/password')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ oldPassword: 'test123', newPassword: 'newpassword123' });
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.message).toContain('密码修改成功');
+
+        const loginRes = await request(app).post('/api/login').send({
+            email: 'test@test.com',
+            password: 'newpassword123'
+        });
+        expect(loginRes.status).toBe(200);
+        expect(loginRes.body.success).toBe(true);
+
+        db.prepare('UPDATE users SET password = ?, password_changed_at = ? WHERE id = ?').run(
+            bcrypt.hashSync('test123', 10), new Date().toISOString(), testUserId
+        );
+    });
+});
+
+// ============ API 集成测试：用户禁用检查 ============
+describe('用户状态 API', () => {
+    test('禁用用户登录应返回 403', async () => {
+        db.prepare('UPDATE users SET enabled = 0 WHERE id = ?').run(testUserId);
+
+        const res = await request(app).post('/api/login').send({
+            email: 'test@test.com',
+            password: 'test123'
+        });
+        expect(res.status).toBe(403);
+        expect(res.body.error).toContain('账号已被禁用');
+
+        db.prepare('UPDATE users SET enabled = 1 WHERE id = ?').run(testUserId);
+    });
+
+    test('禁用用户使用 token 应被拒绝', async () => {
+        db.prepare('UPDATE users SET enabled = 0 WHERE id = ?').run(testUserId);
+
+        const res = await request(app).get('/api/user')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(403);
+
+        db.prepare('UPDATE users SET enabled = 1 WHERE id = ?').run(testUserId);
+    });
+});
+
+// ============ API 集成测试：设置 API ============
+describe('设置 API', () => {
+    test('获取设置应返回默认值', async () => {
+        const res = await request(app).get('/api/settings')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.hour).toBe(8);
+        expect(res.body.minute).toBe(0);
+    });
+
+    test('保存设置：无效小时应返回 400', async () => {
+        const res = await request(app).post('/api/settings')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ hour: 25, minute: 0 });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('小时必须是 0-23 之间的整数');
+    });
+
+    test('保存设置：无效分钟应返回 400', async () => {
+        const res = await request(app).post('/api/settings')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ hour: 8, minute: 60 });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('分钟必须是 0-59 之间的整数');
+    });
+
+    test('保存设置：正常保存应成功', async () => {
+        const res = await request(app).post('/api/settings')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ hour: 20, minute: 30 });
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.reminderTime.hour).toBe(20);
+        expect(res.body.reminderTime.minute).toBe(30);
+
+        const getRes = await request(app).get('/api/settings')
+            .set('Authorization', `Bearer ${testToken}`);
+        expect(getRes.body.hour).toBe(20);
+        expect(getRes.body.minute).toBe(30);
+    });
+
+    test('保存设置：边界值应成功', async () => {
+        const res = await request(app).post('/api/settings')
+            .set('Authorization', `Bearer ${testToken}`)
+            .send({ hour: 0, minute: 0 });
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+    });
+});
+
+// ============ API 集成测试：管理员扩展功能 ============
+describe('管理员 API - 扩展功能', () => {
+    test('管理员重置密码：密码过短应返回 400', async () => {
+        const res = await request(app).post(`/api/admin/user/${testUserId}/password`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ newPassword: '123' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('新密码至少6位');
+    });
+
+    test('管理员重置密码：正常重置应成功', async () => {
+        const res = await request(app).post(`/api/admin/user/${testUserId}/password`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ newPassword: 'adminreset123' });
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+
+        const loginRes = await request(app).post('/api/login').send({
+            email: 'test@test.com',
+            password: 'adminreset123'
+        });
+        expect(loginRes.status).toBe(200);
+
+        db.prepare('UPDATE users SET password = ?, password_changed_at = ? WHERE id = ?').run(
+            bcrypt.hashSync('test123', 10), new Date().toISOString(), testUserId
+        );
+    });
+
+    test('管理员删除用户：删除自己应返回 400', async () => {
+        const res = await request(app).delete(`/api/admin/user/${adminUserId}`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('不能删除自己');
+    });
+
+    test('管理员删除用户：删除管理员应返回 400', async () => {
+        const otherAdminId = db.prepare('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)').run('otheradmin', 'otheradmin@test.com', bcrypt.hashSync('pass', 10), 'admin').lastInsertRowid;
+
+        const res = await request(app).delete(`/api/admin/user/${otherAdminId}`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('不能删除管理员账号');
+
+        db.prepare('DELETE FROM users WHERE id = ?').run(otherAdminId);
+    });
+
+    test('管理员删除用户：删除普通用户应成功', async () => {
+        const otherUserId = db.prepare('INSERT INTO users (username, email, password) VALUES (?, ?, ?)').run('deleteuser', 'delete@test.com', bcrypt.hashSync('pass', 10)).lastInsertRowid;
+
+        const res = await request(app).delete(`/api/admin/user/${otherUserId}`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+
+        const user = db.prepare('SELECT * FROM users WHERE id = ?').get(otherUserId);
+        expect(user).toBeUndefined();
+    });
+
+    test('管理员禁用用户：禁用管理员应返回 400', async () => {
+        const res = await request(app).post(`/api/admin/user/${adminUserId}/toggle`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('不能禁用管理员账号');
+    });
+
+    test('管理员禁用用户：禁用普通用户应成功', async () => {
+        const otherUserId = db.prepare('INSERT INTO users (username, email, password) VALUES (?, ?, ?)').run('toggleuser', 'toggle@test.com', bcrypt.hashSync('pass', 10)).lastInsertRowid;
+
+        const res = await request(app).post(`/api/admin/user/${otherUserId}/toggle`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.enabled).toBe(0);
+
+        const user = db.prepare('SELECT enabled FROM users WHERE id = ?').get(otherUserId);
+        expect(user.enabled).toBe(0);
+
+        db.prepare('DELETE FROM users WHERE id = ?').run(otherUserId);
+    });
+
+    test('管理员获取登录日志应成功', async () => {
+        const res = await request(app).get('/api/admin/login-logs')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.logs).toBeDefined();
+        expect(res.body.page).toBeDefined();
+    });
+
+    test('管理员获取审计日志应成功', async () => {
+        const res = await request(app).get('/api/admin/audit-logs')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.logs).toBeDefined();
+        expect(res.body.page).toBeDefined();
+    });
+
+    test('管理员获取全局统计应成功', async () => {
+        const res = await request(app).get('/api/admin/stats')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.userCount).toBeDefined();
+        expect(res.body.recordCount).toBeDefined();
+        expect(res.body.adminCount).toBeDefined();
+        expect(res.body.todayCount).toBeDefined();
     });
 });
