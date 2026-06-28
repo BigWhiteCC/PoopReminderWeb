@@ -395,7 +395,11 @@ beforeAll(() => {
 
     app.delete('/api/admin/record/:id', authenticateToken, requireAdmin, (req, res) => {
         try {
-            db.prepare('DELETE FROM records WHERE id = ?').run(req.params.id);
+            const id = parseInt(req.params.id);
+            if (isNaN(id)) return res.status(400).json({ error: '无效的记录ID' });
+            const record = db.prepare('SELECT id, user_id FROM records WHERE id = ?').get(id);
+            if (!record) return res.status(404).json({ error: '记录不存在' });
+            db.prepare('DELETE FROM records WHERE id = ?').run(id);
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: '删除失败' }); }
     });
@@ -403,6 +407,7 @@ beforeAll(() => {
     app.post('/api/admin/user/:id/password', authenticateToken, requireAdmin, async (req, res) => {
         const userId = parseInt(req.params.id);
         const { newPassword } = req.body;
+        if (isNaN(userId)) return res.status(400).json({ error: '无效的用户ID' });
         if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: '新密码至少6位' });
         try {
             const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(userId);
@@ -416,6 +421,7 @@ beforeAll(() => {
 
     app.delete('/api/admin/user/:id', authenticateToken, requireAdmin, (req, res) => {
         const userId = parseInt(req.params.id);
+        if (isNaN(userId)) return res.status(400).json({ error: '无效的用户ID' });
         try {
             const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(userId);
             if (!user) return res.status(404).json({ error: '用户不存在' });
@@ -430,6 +436,7 @@ beforeAll(() => {
 
     app.post('/api/admin/user/:id/toggle', authenticateToken, requireAdmin, (req, res) => {
         const userId = parseInt(req.params.id);
+        if (isNaN(userId)) return res.status(400).json({ error: '无效的用户ID' });
         try {
             const user = db.prepare('SELECT id, username, role, enabled FROM users WHERE id = ?').get(userId);
             if (!user) return res.status(404).json({ error: '用户不存在' });
@@ -1132,5 +1139,41 @@ describe('管理员 API - 扩展功能', () => {
         expect(res.body.recordCount).toBeDefined();
         expect(res.body.adminCount).toBeDefined();
         expect(res.body.todayCount).toBeDefined();
+    });
+
+    test('管理员删除记录：无效记录ID应返回400', async () => {
+        const res = await request(app).delete('/api/admin/record/invalid')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('无效的记录ID');
+    });
+
+    test('管理员删除记录：不存在的记录应返回404', async () => {
+        const res = await request(app).delete('/api/admin/record/99999')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(404);
+        expect(res.body.error).toContain('记录不存在');
+    });
+
+    test('管理员重置密码：无效用户ID应返回400', async () => {
+        const res = await request(app).post('/api/admin/user/invalid/password')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ newPassword: 'newpassword123' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('无效的用户ID');
+    });
+
+    test('管理员删除用户：无效用户ID应返回400', async () => {
+        const res = await request(app).delete('/api/admin/user/invalid')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('无效的用户ID');
+    });
+
+    test('管理员禁用用户：无效用户ID应返回400', async () => {
+        const res = await request(app).post('/api/admin/user/invalid/toggle')
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('无效的用户ID');
     });
 });
