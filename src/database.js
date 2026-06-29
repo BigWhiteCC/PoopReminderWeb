@@ -100,7 +100,10 @@ function initializeDatabase() {
     addColumnIfMissing('created_at', 'TEXT');
     addColumnIfMissing('role', "TEXT DEFAULT 'user'", 'users');
     addColumnIfMissing('password_changed_at', 'TEXT', 'users');
-    addColumnIfMissing('enabled', 'INTEGER DEFAULT 1', 'users');
+    addColumnIfMissing('enabled', 'INTEGER NOT NULL DEFAULT 1', 'users');
+
+    // 修复旧数据中可能存在的 NULL 值（ALTER TABLE 无法添加 NOT NULL 约束）
+    db.exec(`UPDATE users SET enabled = 1 WHERE enabled IS NULL`);
 }
 
 // -------- 登录日志 --------
