@@ -178,3 +178,165 @@ describe('escapeHtml - HTML转义', () => {
         expect(escaped).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
     });
 });
+
+// ============ authenticateToken 中间件测试 ============
+jest.mock('./database', () => ({
+    getDb: jest.fn()
+}));
+
+describe('authenticateToken - JWT认证中间件', () => {
+    const jwt = require('jsonwebtoken');
+    const { authenticateToken } = require('./middleware');
+    const { getDb } = require('./database');
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('无 Authorization 头应返回 401', () => {
+        const req = { headers: {} };
+        const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+        const next = jest.fn();
+
+        authenticateToken(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('无 Bearer token 应返回 401', () => {
+        const req = { headers: { authorization: 'Bearer' } };
+        const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+        const next = jest.fn();
+
+        authenticateToken(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+    });
+
+    test('无效 token 应返回 403', (done) => {
+        const req = { headers: { authorization: 'Bearer invalidtoken' } };
+        const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+        const next = jest.fn();
+
+        authenticateToken(req, res, next);
+
+        setTimeout(() => {
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(res.json).toHaveBeenCalledWith({ error: 'Invalid token' });
+            expect(next).not.toHaveBeenCalled();
+            done();
+        }, 50);
+    });
+
+    test('有效 token 应调用 next 并设置 req.user', (done) => {
+        const token = jwt.sign({ userId: 1, username: 'test', role: 'user' }, 'test-secret-key', { expiresIn: '1h' });
+        const req = { headers: { authorization: `Bearer ${token}` } };
+        const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+        const next = jest.fn();
+
+        const mockStmt = { get: jest.fn().mockReturnValue({ password_changed_at: null }) };
+        const mockDb = { prepare: jest.fn().mockReturnValue(mockStmt) };
+        getDb.mockReturnValue(mockDb);
+
+        authenticateToken(req, res, next);
+
+        setTimeout(() => {
+            expect(req.user).toBeDefined();
+            expect(req.user.userId).toBe(1);
+            expect(next).toHaveBeenCalled();
+            expect(res.status).not.toHaveBeenCalled();
+            done();
+        }, 50);
+    });
+
+    test('用户不存在应返回 403', (done) => {
+        const token = jwt.sign({ userId: 999, username: 'ghost', role: 'user' }, 'test-secret-key', { expiresIn: '1h' });
+        const req = { headers: { authorization: `Bearer ${token}` } };
+        const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+        const next = jest.fn();
+
+        const mockStmt = { get: jest.fn().mockReturnValue(undefined) };
+        const mockDb = { prepare: jest.fn().mockReturnValue(mockStmt) };
+        getDb.mockReturnValue(mockDb);
+
+        authenticateToken(req, res, next);
+
+        setTimeout(() => {
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(res.json).toHaveBeenCalledWith({ error: 'User not found' });
+            expect(next).not.toHaveBeenCalled();
+            done();
+        }, 50);
+    });
+
+    test('密码修改后 token 应返回 403', (done) => {
+        const token = jwt.sign({ userId: 1, username: 'test', role: 'user', iat: Math.floor(Date.now() / 1000) - 100 }, 'test-secret-key');
+        const req = { headers: { authorization: `Bearer ${token}` } };
+        const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+        const next = jest.fn();
+
+        const mockStmt = { get: jest.fn().mockReturnValue({ password_changed_at: new Date().toISOString() }) };
+        const mockDb = { prepare: jest.fn().mockReturnValue(mockStmt) };
+        getDb.mockReturnValue(mockDb);
+
+        authenticateToken(req, res, next);
+
+        setTimeout(() => {
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(res.json).toHaveBeenCalledWith({ error: 'Token expired due to password change' });
+            expect(next).not.toHaveBeenCalled();
+            done();
+        }, 50);
+    });
+});
+
+// ============ requireAdmin 中间件测试 ============
+describe('requireAdmin - 管理员权限校验', () => {
+    const { requireAdmin } = require('./middleware');
+
+    test('管理员用户应通过', () => {
+        const req = { user: { userId: 1, role: 'admin' } };
+        const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+        const next = jest.fn();
+
+        requireAdmin(req, res, next);
+
+        expect(next).toHaveBeenCalled();
+        expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('普通用户应被拒绝', () => {
+        const req = { user: { userId: 2, role: 'user' } };
+        const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+        const next = jest.fn();
+
+        requireAdmin(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({ error: '需要管理员权限' });
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('无 user 对象应被拒绝', () => {
+        const req = {};
+        const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+        const next = jest.fn();
+
+        requireAdmin(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    test('user 对象无 role 应被拒绝', () => {
+        const req = { user: { userId: 3 } };
+        const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+        const next = jest.fn();
+
+        requireAdmin(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+    });
+});

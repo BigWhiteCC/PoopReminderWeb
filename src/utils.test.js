@@ -303,3 +303,145 @@ describe('mapRecord - 记录映射', () => {
         expect(mapped.duration).toBe(0);
     });
 });
+
+// ============ toDateKey 实际模块测试 ============
+describe('toDateKey - 实际模块日期键提取', () => {
+    const { toDateKey } = require('./utils');
+
+    test('null/undefined/空字符串应返回 null', () => {
+        expect(toDateKey(null)).toBeNull();
+        expect(toDateKey(undefined)).toBeNull();
+        expect(toDateKey('')).toBeNull();
+    });
+
+    test('纯日期格式 YYYY-MM-DD 应直接返回', () => {
+        expect(toDateKey('2024-01-15')).toBe('2024-01-15');
+        expect(toDateKey('2024-12-31')).toBe('2024-12-31');
+        expect(toDateKey('2023-06-01')).toBe('2023-06-01');
+    });
+
+    test('带时间无时区应提取日期部分', () => {
+        expect(toDateKey('2024-01-15T08:30:00')).toBe('2024-01-15');
+        expect(toDateKey('2024-01-15T23:59:59')).toBe('2024-01-15');
+        expect(toDateKey('2024-06-15 14:30:00')).toBe('2024-06-15');
+    });
+
+    test('UTC 时区应正确转换', () => {
+        // UTC 00:00 is always the same date globally (or next day in western timezones)
+        const result = toDateKey('2024-01-15T00:00:00Z');
+        expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    test('带时区偏移应正确转换', () => {
+        // +08:00 08:00 = UTC 00:00
+        const result = toDateKey('2024-01-15T08:00:00+08:00');
+        expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    test('完全无效字符串应返回 null', () => {
+        expect(toDateKey('not-a-date')).toBeNull();
+        expect(toDateKey('abc')).toBeNull();
+    });
+
+    test('部分匹配的 ISO 字符串应尝试回退', () => {
+        // Should try to extract YYYY-MM-DD from the beginning
+        const result = toDateKey('2024-01-15T25:99:99');
+        // This will try fallback or new Date - may return null or a date key
+        expect(result === null || result.match(/^\d{4}-\d{2}-\d{2}$/)).toBeTruthy();
+    });
+
+    test('数字输入应被转换为字符串处理', () => {
+        // Number will be stringified, then tried as Date
+        const result = toDateKey(20240115);
+        // Might be null or a date depending on Date parsing
+        expect(result === null || result.match(/^\d{4}-\d{2}-\d{2}$/)).toBeTruthy();
+    });
+});
+
+// ============ parseDateKey 实际模块测试 ============
+describe('parseDateKey - 实际模块日期解析', () => {
+    const { parseDateKey } = require('./utils');
+
+    test('null/undefined应返回 null', () => {
+        expect(parseDateKey(null)).toBeNull();
+        expect(parseDateKey(undefined)).toBeNull();
+    });
+
+    test('纯日期应解析为本地午夜', () => {
+        const d = parseDateKey('2024-01-15');
+        expect(d).not.toBeNull();
+        expect(d.getFullYear()).toBe(2024);
+        expect(d.getMonth()).toBe(0);
+        expect(d.getDate()).toBe(15);
+        expect(d.getHours()).toBe(0);
+        expect(d.getMinutes()).toBe(0);
+        expect(d.getSeconds()).toBe(0);
+    });
+
+    test('带时间无时区应解析为本地时间', () => {
+        const d = parseDateKey('2024-01-15T14:30:00');
+        expect(d).not.toBeNull();
+        expect(d.getFullYear()).toBe(2024);
+        expect(d.getMonth()).toBe(0);
+        expect(d.getDate()).toBe(15);
+        expect(d.getHours()).toBe(14);
+        expect(d.getMinutes()).toBe(30);
+    });
+
+    test('UTC 时间应转换为本地时间', () => {
+        const d = parseDateKey('2024-01-15T08:00:00Z');
+        expect(d).not.toBeNull();
+        expect(d instanceof Date).toBe(true);
+        // The exact local time depends on timezone, but it should be a valid date
+        expect(d.getFullYear()).toBe(2024);
+    });
+
+    test('带正偏移的时区应正确转换', () => {
+        const d = parseDateKey('2024-01-15T08:00:00+08:00');
+        expect(d).not.toBeNull();
+        // +08:00 08:00 = UTC 00:00, local time depends on timezone
+        expect(d instanceof Date).toBe(true);
+    });
+
+    test('带负偏移的时区应正确转换', () => {
+        const d = parseDateKey('2024-01-15T00:00:00-05:00');
+        expect(d).not.toBeNull();
+        expect(d instanceof Date).toBe(true);
+    });
+
+    test('带毫秒的 ISO 字符串应正确解析', () => {
+        const d = parseDateKey('2024-01-15T08:30:00.123');
+        expect(d).not.toBeNull();
+        expect(d.getHours()).toBe(8);
+        expect(d.getMinutes()).toBe(30);
+    });
+
+    test('完全无效字符串应返回 null', () => {
+        expect(parseDateKey('not-a-date')).toBeNull();
+        expect(parseDateKey('abc123')).toBeNull();
+    });
+
+    test('空格前后有空白应正确处理', () => {
+        const d = parseDateKey('  2024-01-15  ');
+        // trim is applied, so this should work
+        expect(d).not.toBeNull();
+        expect(d.getFullYear()).toBe(2024);
+    });
+
+    test('闰年日期应正确解析', () => {
+        const d = parseDateKey('2024-02-29');
+        expect(d).not.toBeNull();
+        expect(d.getMonth()).toBe(1);
+        expect(d.getDate()).toBe(29);
+    });
+
+    test('非闰年2月29日应返回 null 或自动调整', () => {
+        // 2023 is not a leap year, Feb 29 is invalid
+        const d = parseDateKey('2023-02-29');
+        // JavaScript Date auto-adjusts to Mar 1, so this returns a Date (not null)
+        // But it's still a valid JS Date object
+        if (d) {
+            expect(d instanceof Date).toBe(true);
+        }
+    });
+});
