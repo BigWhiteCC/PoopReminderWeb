@@ -63,6 +63,7 @@ beforeAll(() => {
         CREATE TABLE IF NOT EXISTS login_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
+            success INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS admin_audit_logs (
@@ -421,9 +422,16 @@ beforeAll(() => {
             if (!user) return res.status(404).json({ error: '用户不存在' });
             if (userId === req.user.userId) return res.status(400).json({ error: '不能删除自己' });
             if (user.role === 'admin') return res.status(400).json({ error: '不能删除管理员账号' });
-            db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
-            db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
-            db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+
+            // 使用事务确保数据完整性
+            const deleteUserTransaction = db.transaction(() => {
+                db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM login_logs WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+            });
+
+            deleteUserTransaction();
             res.json({ success: true, message: `用户 ${user.username} 已删除` });
         } catch (err) { res.status(500).json({ error: '删除失败' }); }
     });
@@ -1074,16 +1082,31 @@ describe('管理员 API - 扩展功能', () => {
         db.prepare('DELETE FROM users WHERE id = ?').run(otherAdminId);
     });
 
-    test('管理员删除用户：删除普通用户应成功', async () => {
+    test('管理员删除用户：删除普通用户应成功并确保数据完整性', async () => {
         const otherUserId = db.prepare('INSERT INTO users (username, email, password) VALUES (?, ?, ?)').run('deleteuser', 'delete@test.com', bcrypt.hashSync('pass', 10)).lastInsertRowid;
+
+        // 为该用户创建相关数据：记录、设置、登录日志
+        db.prepare('INSERT INTO records (user_id, date, poop_type, duration) VALUES (?, ?, ?, ?)').run(otherUserId, new Date().toISOString(), 4, 300);
+        db.prepare('INSERT INTO user_settings (user_id, reminder_hour, reminder_minute) VALUES (?, ?, ?)').run(otherUserId, 8, 0);
+        db.prepare('INSERT INTO login_logs (user_id, success) VALUES (?, ?)').run(otherUserId, 1);
 
         const res = await request(app).delete(`/api/admin/user/${otherUserId}`)
             .set('Authorization', `Bearer ${adminToken}`);
         expect(res.status).toBe(200);
         expect(res.body.success).toBe(true);
 
+        // 验证事务原子性：所有相关数据都应被删除
         const user = db.prepare('SELECT * FROM users WHERE id = ?').get(otherUserId);
         expect(user).toBeUndefined();
+
+        const records = db.prepare('SELECT * FROM records WHERE user_id = ?').all(otherUserId);
+        expect(records.length).toBe(0);
+
+        const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(otherUserId);
+        expect(settings).toBeUndefined();
+
+        const loginLogs = db.prepare('SELECT * FROM login_logs WHERE user_id = ?').all(otherUserId);
+        expect(loginLogs.length).toBe(0);
     });
 
     test('管理员禁用用户：禁用管理员应返回 400', async () => {
