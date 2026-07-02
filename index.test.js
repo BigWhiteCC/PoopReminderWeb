@@ -10,7 +10,7 @@ const Database = require('better-sqlite3');
 
 // 测试数据库路径
 const TEST_DB_PATH = ':memory:';
-const JWT_SECRET = 'test-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET || 'test-secret-key';
 
 // 创建测试用的 express 应用
 let app;

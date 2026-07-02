@@ -71,7 +71,17 @@ const ASSET_MIME = {
 
 app.use('/assets', (req, res) => {
     const relPath = req.path.substring(1);
-    const filePath = path.join(ASSETS_DIR, relPath);
+    const normalizedPath = path.normalize(relPath);
+    if (normalizedPath.startsWith('..') || normalizedPath.startsWith('/')) {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        return res.status(403).send('Forbidden');
+    }
+    const filePath = path.join(ASSETS_DIR, normalizedPath);
+    const resolvedPath = path.resolve(filePath);
+    if (!resolvedPath.startsWith(path.resolve(ASSETS_DIR))) {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        return res.status(403).send('Forbidden');
+    }
     const ext = path.extname(filePath).toLowerCase();
     fs.stat(filePath, (err, stat) => {
         if (err || !stat || !stat.isFile()) {
