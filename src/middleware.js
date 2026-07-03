@@ -87,10 +87,19 @@ function authenticateToken(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-    if (!req.user || req.user.role !== 'admin') {
+    if (!req.user) {
         return res.status(403).json({ error: '需要管理员权限' });
     }
-    next();
+    try {
+        const db = getDb();
+        const user = db.prepare('SELECT role FROM users WHERE id = ?').get(req.user.userId);
+        if (!user || user.role !== 'admin') {
+            return res.status(403).json({ error: '需要管理员权限' });
+        }
+        next();
+    } catch (e) {
+        return res.status(500).json({ error: '权限验证失败' });
+    }
 }
 
 // -------- 输入验证 --------

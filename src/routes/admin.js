@@ -18,7 +18,7 @@ router.get('/users', authenticateToken, requireAdmin, (req, res) => {
                    COUNT(r.id) as record_count
             FROM users u
             LEFT JOIN records r ON r.user_id = u.id
-            GROUP BY u.id
+            GROUP BY u.id, u.enabled
             ORDER BY u.id DESC
         `).all();
         res.json({ users });
@@ -69,7 +69,6 @@ router.get('/records', authenticateToken, requireAdmin, (req, res) => {
 
         // 统计
         const typeStats = {};
-        let totalRecords = mapped.length;
         let totalDuration = 0, durationCount = 0;
         mapped.forEach(r => {
             if (r.poopType) typeStats[r.poopType] = (typeStats[r.poopType] || 0) + 1;
@@ -79,7 +78,7 @@ router.get('/records', authenticateToken, requireAdmin, (req, res) => {
 
         res.json({
             records: mapped,
-            total: totalRecords,
+            total: total,
             avgDuration,
             typeStats,
             page: { limit: lim, offset: off, total }
@@ -127,8 +126,9 @@ router.delete('/record/:id', authenticateToken, requireAdmin, (req, res) => {
     const db = getDb();
     try {
         const record = db.prepare('SELECT id, user_id FROM records WHERE id = ?').get(req.params.id);
+        if (!record) return res.status(404).json({ error: '记录不存在' });
         db.prepare('DELETE FROM records WHERE id = ?').run(req.params.id);
-        addAuditLog(req.user.userId, 'DELETE_RECORD', 'record', req.params.id, `删除用户${record ? record.user_id : ''}的记录`);
+        addAuditLog(req.user.userId, 'DELETE_RECORD', 'record', req.params.id, `删除用户${record.user_id}的记录`);
         res.json({ success: true });
     } catch (err) {
         const e = handleError(err, 'adminDeleteRecord');
