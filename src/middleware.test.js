@@ -1,11 +1,15 @@
 process.env.JWT_SECRET = 'test-secret-key';
 
+const jwt = require('jsonwebtoken');
+
 const {
     validateUsername,
     validateEmail,
     validatePassword,
     handleError,
-    escapeHtml
+    escapeHtml,
+    authenticateToken,
+    requireAdmin
 } = require('./middleware');
 
 describe('validateUsername - 用户名验证', () => {
@@ -137,11 +141,6 @@ describe('handleError - 错误处理', () => {
         expect(result.status).toBe(500);
         expect(result.message).toBe('服务器异常，请稍后重试');
     });
-
-    test('应包含 context 参数', () => {
-        const err = new Error('test error');
-        handleError(err, 'register');
-    });
 });
 
 describe('escapeHtml - HTML转义', () => {
@@ -176,5 +175,120 @@ describe('escapeHtml - HTML转义', () => {
         expect(escaped).not.toContain('<script>');
         expect(escaped).not.toContain('</script>');
         expect(escaped).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
+    });
+});
+
+describe('authenticateToken - 认证中间件', () => {
+    test('无 Authorization 头应返回 401', () => {
+        const req = { headers: {} };
+        const res = {
+            status: jest.fn().mockReturnThis(),
+            json: jest.fn()
+        };
+        const next = jest.fn();
+
+        authenticateToken(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('无效 token 应返回 403', () => {
+        const req = { headers: { authorization: 'Bearer invalid-token' } };
+        const res = {
+            status: jest.fn().mockReturnThis(),
+            json: jest.fn()
+        };
+        const next = jest.fn();
+
+        authenticateToken(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Invalid token' });
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('有效 token 应解析用户信息', async () => {
+        jest.resetModules();
+        
+        const mockGet = jest.fn().mockReturnValue({ password_changed_at: null });
+        const mockPrepare = jest.fn().mockReturnValue({ get: mockGet });
+        const mockDb = {
+            pragma: jest.fn(),
+            exec: jest.fn(),
+            prepare: mockPrepare
+        };
+        
+        jest.mock('better-sqlite3', () => jest.fn(() => mockDb));
+
+        const { authenticateToken } = require('./middleware');
+        const userId = 1;
+        const token = jwt.sign({ userId, username: 'testuser', role: 'user' }, process.env.JWT_SECRET);
+
+        const req = { headers: { authorization: `Bearer ${token}` } };
+        const res = {
+            status: jest.fn().mockReturnThis(),
+            json: jest.fn()
+        };
+        const next = jest.fn();
+
+        await new Promise(resolve => {
+            authenticateToken(req, res, () => {
+                next();
+                resolve();
+            });
+        });
+
+        expect(next).toHaveBeenCalled();
+        expect(req.user).toBeDefined();
+        expect(req.user.userId).toBe(userId);
+        expect(req.user.username).toBe('testuser');
+    });
+});
+
+describe('requireAdmin - 管理员权限中间件', () => {
+    test('无用户应返回 403', () => {
+        const req = {};
+        const res = {
+            status: jest.fn().mockReturnThis(),
+            json: jest.fn()
+        };
+        const next = jest.fn();
+
+        requireAdmin(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({ error: '需要管理员权限' });
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('普通用户应返回 403', () => {
+        const req = { user: { userId: 1, username: 'testuser', role: 'user' } };
+        const res = {
+            status: jest.fn().mockReturnThis(),
+            json: jest.fn()
+        };
+        const next = jest.fn();
+
+        requireAdmin(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({ error: '需要管理员权限' });
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('管理员用户应调用 next', () => {
+        const req = { user: { userId: 1, username: 'admin', role: 'admin' } };
+        const res = {
+            status: jest.fn().mockReturnThis(),
+            json: jest.fn()
+        };
+        const next = jest.fn();
+
+        requireAdmin(req, res, next);
+
+        expect(next).toHaveBeenCalled();
+        expect(res.status).not.toHaveBeenCalled();
     });
 });

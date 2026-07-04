@@ -1,4 +1,6 @@
 const {
+    toDateKey,
+    parseDateKey,
     getWeekRange,
     daysBetween,
     getWeekNumber,
@@ -100,6 +102,92 @@ describe('getWeekNumber - 获取周数', () => {
         const date = new Date(2023, 0, 1); // 2023-01-01 周日
         const weekNum = getWeekNumber(date);
         expect([52, 1]).toContain(weekNum);
+    });
+});
+
+describe('toDateKey - 日期解析与时区处理', () => {
+    test('纯日期格式 YYYY-MM-DD 应正确解析', () => {
+        expect(toDateKey('2024-01-15')).toBe('2024-01-15');
+        expect(toDateKey('2024-12-31')).toBe('2024-12-31');
+    });
+
+    test('带时间的 ISO 字符串（无时区）应取本地日期', () => {
+        expect(toDateKey('2024-01-15T08:30:00')).toBe('2024-01-15');
+        expect(toDateKey('2024-01-15T23:59:59')).toBe('2024-01-15');
+    });
+
+    test('带 Z 时区的 UTC 时间应转换为本地日期', () => {
+        const result = toDateKey('2024-01-15T00:00:00Z');
+        expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    test('带时区偏移的 ISO 字符串应正确转换', () => {
+        expect(toDateKey('2024-01-15T08:00:00+08:00')).toBe('2024-01-15');
+        expect(toDateKey('2024-01-15T00:00:00-08:00')).toBe('2024-01-15');
+    });
+
+    test('空值和无效输入应返回 null', () => {
+        expect(toDateKey(null)).toBeNull();
+        expect(toDateKey(undefined)).toBeNull();
+        expect(toDateKey('')).toBeNull();
+        expect(toDateKey('invalid')).toBeNull();
+    });
+
+    test('边界情况：跨日期的时间点', () => {
+        expect(toDateKey('2024-01-15T23:59:59')).toBe('2024-01-15');
+        expect(toDateKey('2024-01-16T00:00:00')).toBe('2024-01-16');
+    });
+
+    test('Date 对象应正确转换', () => {
+        const date = new Date(2024, 0, 15, 12, 30, 45);
+        expect(toDateKey(date)).toBe('2024-01-15');
+    });
+});
+
+describe('parseDateKey - 完整日期解析', () => {
+    test('纯日期应解析为本地 00:00:00', () => {
+        const d = parseDateKey('2024-01-15');
+        expect(d).not.toBeNull();
+        expect(d.getFullYear()).toBe(2024);
+        expect(d.getMonth()).toBe(0);
+        expect(d.getDate()).toBe(15);
+        expect(d.getHours()).toBe(0);
+        expect(d.getMinutes()).toBe(0);
+    });
+
+    test('带时间的 ISO 字符串应正确解析', () => {
+        const d = parseDateKey('2024-01-15T14:30:00');
+        expect(d).not.toBeNull();
+        expect(d.getHours()).toBe(14);
+        expect(d.getMinutes()).toBe(30);
+    });
+
+    test('带 Z 时区应转换为本地时间', () => {
+        const d = parseDateKey('2024-01-15T08:00:00Z');
+        expect(d).not.toBeNull();
+        expect(d.getFullYear()).toBe(2024);
+        expect(d.getMonth()).toBe(0);
+        expect(d.getDate()).toBe(15);
+    });
+
+    test('带时区偏移应正确转换', () => {
+        const d = parseDateKey('2024-01-15T08:00:00+08:00');
+        expect(d).not.toBeNull();
+        expect(d.getFullYear()).toBe(2024);
+        expect(d.getMonth()).toBe(0);
+        expect(d.getDate()).toBe(15);
+    });
+
+    test('无效日期应返回 null', () => {
+        expect(parseDateKey(null)).toBeNull();
+        expect(parseDateKey('invalid')).toBeNull();
+        expect(parseDateKey('not-a-date')).toBeNull();
+    });
+
+    test('Date 对象应直接返回', () => {
+        const date = new Date(2024, 0, 15, 12, 30, 45);
+        const d = parseDateKey(date);
+        expect(d).toStrictEqual(date);
     });
 });
 
