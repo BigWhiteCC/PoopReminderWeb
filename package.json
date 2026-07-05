@@ -33,7 +33,12 @@
   "jest": {
     "testEnvironment": "node",
     "testMatch": ["**/*.test.js"],
-    "collectCoverageFrom": ["index.js", "frontend/src/services/api.js"],
+    "collectCoverageFrom": [
+      "index.js",
+      "src/**/*.js",
+      "!src/**/*.test.js",
+      "frontend/src/services/api.js"
+    ],
     "coverageDirectory": "coverage",
     "coverageReporters": ["text", "lcov"]
   }
