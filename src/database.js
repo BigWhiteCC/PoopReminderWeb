@@ -101,6 +101,13 @@ function initializeDatabase() {
     addColumnIfMissing('role', "TEXT DEFAULT 'user'", 'users');
     addColumnIfMissing('password_changed_at', 'TEXT', 'users');
     addColumnIfMissing('enabled', 'INTEGER DEFAULT 1', 'users');
+
+    // 确保 enabled 字段没有 NULL 值（向后兼容）
+    try {
+        db.exec("UPDATE users SET enabled = 1 WHERE enabled IS NULL");
+    } catch (e) {
+        // 字段不存在时忽略
+    }
 }
 
 // -------- 登录日志 --------

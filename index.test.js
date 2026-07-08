@@ -63,7 +63,16 @@ beforeAll(() => {
         CREATE TABLE IF NOT EXISTS login_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            device_type TEXT,
+            device_browser TEXT,
+            device_os TEXT,
+            device_model TEXT,
+            ip TEXT,
+            user_agent TEXT,
+            success INTEGER NOT NULL DEFAULT 0,
+            fail_reason TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
         );
         CREATE TABLE IF NOT EXISTS admin_audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -421,9 +430,16 @@ beforeAll(() => {
             if (!user) return res.status(404).json({ error: '用户不存在' });
             if (userId === req.user.userId) return res.status(400).json({ error: '不能删除自己' });
             if (user.role === 'admin') return res.status(400).json({ error: '不能删除管理员账号' });
-            db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
-            db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
-            db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+
+            // 使用事务确保删除操作的原子性
+            const deleteUser = db.transaction(() => {
+                db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM login_logs WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+            });
+            deleteUser();
+
             res.json({ success: true, message: `用户 ${user.username} 已删除` });
         } catch (err) { res.status(500).json({ error: '删除失败' }); }
     });
@@ -967,6 +983,22 @@ describe('用户状态 API', () => {
         db.prepare('UPDATE users SET enabled = 1 WHERE id = ?').run(testUserId);
     });
 
+    test('enabled 字段为 NULL 的用户应能正常登录（向后兼容）', async () => {
+        // 模拟旧数据库升级场景：enabled 为 NULL
+        db.prepare('UPDATE users SET enabled = NULL WHERE id = ?').run(testUserId);
+
+        const res = await request(app).post('/api/login').send({
+            email: 'test@test.com',
+            password: 'test123'
+        });
+        // enabled 为 NULL 时，用户应能登录（视为启用）
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+
+        // 手动恢复状态
+        db.prepare('UPDATE users SET enabled = 1 WHERE id = ?').run(testUserId);
+    });
+
     test('禁用用户使用 token 应被拒绝', async () => {
         db.prepare('UPDATE users SET enabled = 0 WHERE id = ?').run(testUserId);
 
@@ -1077,13 +1109,28 @@ describe('管理员 API - 扩展功能', () => {
     test('管理员删除用户：删除普通用户应成功', async () => {
         const otherUserId = db.prepare('INSERT INTO users (username, email, password) VALUES (?, ?, ?)').run('deleteuser', 'delete@test.com', bcrypt.hashSync('pass', 10)).lastInsertRowid;
 
+        // 创建关联数据：记录、设置、登录日志
+        db.prepare('INSERT INTO records (user_id, date, poop_type) VALUES (?, ?, ?)').run(otherUserId, new Date().toISOString(), 4);
+        db.prepare('INSERT OR IGNORE INTO user_settings (user_id, reminder_hour) VALUES (?, ?)').run(otherUserId, 8);
+        db.prepare('INSERT INTO login_logs (user_id, success) VALUES (?, ?)').run(otherUserId, 1);
+
         const res = await request(app).delete(`/api/admin/user/${otherUserId}`)
             .set('Authorization', `Bearer ${adminToken}`);
         expect(res.status).toBe(200);
         expect(res.body.success).toBe(true);
 
+        // 验证用户和所有关联数据都被删除（事务原子性）
         const user = db.prepare('SELECT * FROM users WHERE id = ?').get(otherUserId);
         expect(user).toBeUndefined();
+
+        const records = db.prepare('SELECT * FROM records WHERE user_id = ?').all(otherUserId);
+        expect(records.length).toBe(0);
+
+        const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(otherUserId);
+        expect(settings).toBeUndefined();
+
+        const loginLogs = db.prepare('SELECT * FROM login_logs WHERE user_id = ?').all(otherUserId);
+        expect(loginLogs.length).toBe(0);
     });
 
     test('管理员禁用用户：禁用管理员应返回 400', async () => {
