@@ -421,9 +421,13 @@ beforeAll(() => {
             if (!user) return res.status(404).json({ error: '用户不存在' });
             if (userId === req.user.userId) return res.status(400).json({ error: '不能删除自己' });
             if (user.role === 'admin') return res.status(400).json({ error: '不能删除管理员账号' });
-            db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
-            db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
-            db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+            // 使用事务确保数据完整性
+            db.transaction(() => {
+                db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM login_logs WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+            })();
             res.json({ success: true, message: `用户 ${user.username} 已删除` });
         } catch (err) { res.status(500).json({ error: '删除失败' }); }
     });

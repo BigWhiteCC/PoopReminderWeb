@@ -173,10 +173,13 @@ router.delete('/user/:id', authenticateToken, requireAdmin, (req, res) => {
         if (userId === req.user.userId) return res.status(400).json({ error: '不能删除自己' });
         if (user.role === 'admin') return res.status(400).json({ error: '不能删除管理员账号' });
 
-        db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
-        db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
-        db.prepare('DELETE FROM login_logs WHERE user_id = ?').run(userId);
-        db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+        // 使用事务确保数据完整性：要么全部删除，要么全部不删除
+        db.transaction(() => {
+            db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM login_logs WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+        })();
 
         addAuditLog(req.user.userId, 'DELETE_USER', 'user', userId, `删除用户: ${user.username}`);
         res.json({ success: true, message: `用户 ${user.username} 已删除` });
