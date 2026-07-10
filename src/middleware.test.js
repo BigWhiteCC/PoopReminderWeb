@@ -1,12 +1,45 @@
 process.env.JWT_SECRET = 'test-secret-key';
 
+const jwt = require('jsonwebtoken');
+const Database = require('better-sqlite3');
+
+const mockDb = new Database(':memory:');
+mockDb.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user',
+        enabled INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        password_changed_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+`);
+
+const result = mockDb.prepare('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)').run('testuser', 'test@test.com', 'hashed', 'user');
+const testUserId = result.lastInsertRowid;
+
+const adminResult = mockDb.prepare('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)').run('admin', 'admin@test.com', 'hashed', 'admin');
+const adminUserId = adminResult.lastInsertRowid;
+
+jest.mock('./database', () => ({
+    getDb: () => mockDb
+}));
+
 const {
     validateUsername,
     validateEmail,
     validatePassword,
     handleError,
-    escapeHtml
+    escapeHtml,
+    authenticateToken,
+    requireAdmin
 } = require('./middleware');
+
+afterAll(() => {
+    mockDb.close();
+});
 
 describe('validateUsername - 用户名验证', () => {
     test('空值应返回错误', () => {
@@ -176,5 +209,182 @@ describe('escapeHtml - HTML转义', () => {
         expect(escaped).not.toContain('<script>');
         expect(escaped).not.toContain('</script>');
         expect(escaped).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
+    });
+});
+
+describe('authenticateToken - JWT 认证中间件', () => {
+    function mockReq(authHeader) {
+        return { headers: { authorization: authHeader } };
+    }
+    function mockRes() {
+        const res = {
+            statusCode: 200,
+            body: null,
+            status(code) {
+                res.statusCode = code;
+                return res;
+            },
+            json(data) {
+                res.body = data;
+                return res;
+            }
+        };
+        return res;
+    }
+
+    test('无 token 应返回 401 Unauthorized', () => {
+        const req = mockReq(undefined);
+        const res = mockRes();
+        const result = authenticateToken(req, res, () => {});
+        expect(res.statusCode).toBe(401);
+        expect(res.body.error).toBe('Unauthorized');
+    });
+
+    test('无效 token 应返回 403 Invalid token', (done) => {
+        const req = mockReq('Bearer invalid-token');
+        const res = mockRes();
+        authenticateToken(req, res, () => {});
+        setImmediate(() => {
+            expect(res.statusCode).toBe(403);
+            expect(res.body.error).toBe('Invalid token');
+            done();
+        });
+    });
+
+    test('有效 token 应设置 req.user 并调用 next', (done) => {
+        const token = jwt.sign({ userId: testUserId, username: 'testuser', role: 'user' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const req = mockReq(`Bearer ${token}`);
+        const res = mockRes();
+        authenticateToken(req, res, (err) => {
+            expect(err).toBeUndefined();
+            expect(req.user).toBeDefined();
+            expect(req.user.userId).toBe(testUserId);
+            expect(req.user.username).toBe('testuser');
+            expect(res.statusCode).toBe(200);
+            done();
+        });
+    });
+
+    test('用户不存在应返回 403 User not found', (done) => {
+        const token = jwt.sign({ userId: 99999, username: 'nonexistent', role: 'user' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const req = mockReq(`Bearer ${token}`);
+        const res = mockRes();
+        authenticateToken(req, res, () => {});
+        setImmediate(() => {
+            expect(res.statusCode).toBe(403);
+            expect(res.body.error).toBe('User not found');
+            done();
+        });
+    });
+
+    test('密码变更后旧 token 应被撤销', (done) => {
+        const pastDate = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        const token = jwt.sign(
+            { userId: testUserId, username: 'testuser', role: 'user', iat: Math.floor(pastDate.getTime() / 1000) },
+            process.env.JWT_SECRET
+        );
+
+        const futureDate = new Date(Date.now() + 60 * 60 * 1000);
+        mockDb.prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').run(futureDate.toISOString(), testUserId);
+
+        const req = mockReq(`Bearer ${token}`);
+        const res = mockRes();
+        authenticateToken(req, res, () => {});
+        setImmediate(() => {
+            expect(res.statusCode).toBe(403);
+            expect(res.body.error).toBe('Token expired due to password change');
+            mockDb.prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').run(new Date().toISOString(), testUserId);
+            done();
+        });
+    });
+
+    test('密码变更前签发的 token 应仍然有效', (done) => {
+        const tokenIssuedAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+        const token = jwt.sign(
+            { userId: testUserId, username: 'testuser', role: 'user', iat: Math.floor(tokenIssuedAt.getTime() / 1000) },
+            process.env.JWT_SECRET
+        );
+
+        const passwordChangedAt = new Date(Date.now() - 60 * 60 * 1000);
+        mockDb.prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').run(passwordChangedAt.toISOString(), testUserId);
+
+        const req = mockReq(`Bearer ${token}`);
+        const res = mockRes();
+        authenticateToken(req, res, (err) => {
+            expect(err).toBeUndefined();
+            expect(req.user).toBeDefined();
+            expect(req.user.userId).toBe(testUserId);
+            mockDb.prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').run(new Date().toISOString(), testUserId);
+            done();
+        });
+    });
+
+    test('缺少 password_changed_at 字段应正常通过', (done) => {
+        mockDb.prepare('UPDATE users SET password_changed_at = NULL WHERE id = ?').run(testUserId);
+        const token = jwt.sign({ userId: testUserId, username: 'testuser', role: 'user' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const req = mockReq(`Bearer ${token}`);
+        const res = mockRes();
+        authenticateToken(req, res, (err) => {
+            expect(err).toBeUndefined();
+            expect(req.user).toBeDefined();
+            expect(req.user.userId).toBe(testUserId);
+            mockDb.prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').run(new Date().toISOString(), testUserId);
+            done();
+        });
+    });
+});
+
+describe('requireAdmin - 管理员权限中间件', () => {
+    function mockRes() {
+        const res = {
+            statusCode: 200,
+            body: null,
+            status(code) {
+                res.statusCode = code;
+                return res;
+            },
+            json(data) {
+                res.body = data;
+                return res;
+            }
+        };
+        return res;
+    }
+
+    test('普通用户应返回 403', () => {
+        const req = { user: { userId: testUserId, role: 'user' } };
+        const res = mockRes();
+        let nextCalled = false;
+        requireAdmin(req, res, () => { nextCalled = true; });
+        expect(nextCalled).toBe(false);
+        expect(res.statusCode).toBe(403);
+        expect(res.body.error).toContain('管理员权限');
+    });
+
+    test('管理员应调用 next', () => {
+        const req = { user: { userId: adminUserId, role: 'admin' } };
+        const res = mockRes();
+        let nextCalled = false;
+        requireAdmin(req, res, () => { nextCalled = true; });
+        expect(nextCalled).toBe(true);
+        expect(res.statusCode).toBe(200);
+    });
+
+    test('无 req.user 应返回 403', () => {
+        const req = {};
+        const res = mockRes();
+        let nextCalled = false;
+        requireAdmin(req, res, () => { nextCalled = true; });
+        expect(nextCalled).toBe(false);
+        expect(res.statusCode).toBe(403);
+    });
+
+    test('role 为 undefined 应返回 403', () => {
+        const req = { user: { userId: testUserId } };
+        const res = mockRes();
+        let nextCalled = false;
+        requireAdmin(req, res, () => { nextCalled = true; });
+        expect(nextCalled).toBe(false);
+        expect(res.statusCode).toBe(403);
     });
 });

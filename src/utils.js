@@ -52,7 +52,7 @@ function parseDateKey(dateStr) {
         }
         if (tz) {
             const sign = tz[0] === '-' ? -1 : 1;
-            const body = tz.replace(/[+-:]/g, '');
+            const body = tz.replace(/[-+:]/g, '');
             const oh = parseInt(body.slice(0, 2), 10) || 0;
             const om = parseInt(body.slice(2, 4), 10) || 0;
             const offsetMs = sign * (oh * 60 + om) * 60 * 1000;

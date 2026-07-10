@@ -1,10 +1,188 @@
 const {
+    toDateKey,
+    parseDateKey,
     getWeekRange,
     daysBetween,
     getWeekNumber,
     extractDeviceInfo,
     mapRecord
 } = require('./utils');
+
+describe('toDateKey - 日期键提取', () => {
+    test('纯日期格式 YYYY-MM-DD 应原样返回', () => {
+        expect(toDateKey('2024-01-15')).toBe('2024-01-15');
+        expect(toDateKey('2024-12-31')).toBe('2024-12-31');
+        expect(toDateKey('2023-02-28')).toBe('2023-02-28');
+    });
+
+    test('带 T 分隔的 ISO 时间（无时区）应提取日期', () => {
+        expect(toDateKey('2024-01-15T08:30:00')).toBe('2024-01-15');
+        expect(toDateKey('2024-01-15T23:59:59')).toBe('2024-01-15');
+        expect(toDateKey('2024-01-15T00:00:00')).toBe('2024-01-15');
+    });
+
+    test('带空格分隔的时间字符串应提取日期', () => {
+        expect(toDateKey('2024-01-15 08:30:00')).toBe('2024-01-15');
+    });
+
+    test('带毫秒的时间字符串应正确提取日期', () => {
+        expect(toDateKey('2024-01-15T08:30:00.123')).toBe('2024-01-15');
+        expect(toDateKey('2024-01-15T08:30:00.999999')).toBe('2024-01-15');
+    });
+
+    test('带 Z 时区（UTC）的字符串应转换为本地日期', () => {
+        const result = toDateKey('2024-01-15T00:00:00Z');
+        expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(result).toBeDefined();
+    });
+
+    test('带正偏移时区应正确转换', () => {
+        const result = toDateKey('2024-01-15T08:00:00+08:00');
+        expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    test('带负偏移时区应正确转换', () => {
+        const result = toDateKey('2024-01-15T00:00:00-08:00');
+        expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    test('带冒号和不带冒号的时区偏移都应支持', () => {
+        const r1 = toDateKey('2024-01-15T08:00:00+0800');
+        const r2 = toDateKey('2024-01-15T08:00:00+08:00');
+        expect(r1).toBe(r2);
+    });
+
+    test('空值应返回 null', () => {
+        expect(toDateKey(null)).toBeNull();
+        expect(toDateKey(undefined)).toBeNull();
+        expect(toDateKey('')).toBeNull();
+    });
+
+    test('完全无效的字符串应返回 null', () => {
+        expect(toDateKey('invalid')).toBeNull();
+        expect(toDateKey('not-a-date')).toBeNull();
+        expect(toDateKey('abc123')).toBeNull();
+    });
+
+    test('数字类型输入应被转为字符串处理', () => {
+        const result = toDateKey(20240115);
+        expect(result).toBeNull();
+    });
+
+    test('首尾空格应被修剪', () => {
+        expect(toDateKey('  2024-01-15  ')).toBe('2024-01-15');
+    });
+
+    test('非 ISO 格式但可被 Date 解析的字符串应返回日期', () => {
+        const result = toDateKey('Jan 15, 2024');
+        expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    test('仅含日期前缀的无效字符串应使用回退匹配', () => {
+        expect(toDateKey('2024-01-15-something')).toBe('2024-01-15');
+    });
+
+    test('边界：2月29日闰年应正确处理', () => {
+        expect(toDateKey('2024-02-29')).toBe('2024-02-29');
+    });
+});
+
+describe('parseDateKey - 完整日期解析', () => {
+    test('纯日期 YYYY-MM-DD 应解析为本地 00:00:00', () => {
+        const d = parseDateKey('2024-01-15');
+        expect(d).not.toBeNull();
+        expect(d).toBeInstanceOf(Date);
+        expect(d.getFullYear()).toBe(2024);
+        expect(d.getMonth()).toBe(0);
+        expect(d.getDate()).toBe(15);
+        expect(d.getHours()).toBe(0);
+        expect(d.getMinutes()).toBe(0);
+        expect(d.getSeconds()).toBe(0);
+    });
+
+    test('带时间的 ISO 字符串应正确解析时分秒', () => {
+        const d = parseDateKey('2024-01-15T14:30:45');
+        expect(d).not.toBeNull();
+        expect(d.getHours()).toBe(14);
+        expect(d.getMinutes()).toBe(30);
+        expect(d.getSeconds()).toBe(45);
+    });
+
+    test('带空格的时间字符串应正确解析', () => {
+        const d = parseDateKey('2024-01-15 14:30:45');
+        expect(d).not.toBeNull();
+        expect(d.getHours()).toBe(14);
+        expect(d.getMinutes()).toBe(30);
+    });
+
+    test('无秒数的时间字符串应正确解析', () => {
+        const d = parseDateKey('2024-01-15T14:30');
+        expect(d).not.toBeNull();
+        expect(d.getHours()).toBe(14);
+        expect(d.getMinutes()).toBe(30);
+        expect(d.getSeconds()).toBe(0);
+    });
+
+    test('带毫秒的时间字符串应正确解析', () => {
+        const d = parseDateKey('2024-01-15T14:30:45.500');
+        expect(d).not.toBeNull();
+        expect(d.getMilliseconds()).toBe(500);
+    });
+
+    test('带 Z 时区应解析为 UTC 时间', () => {
+        const d = parseDateKey('2024-01-15T08:00:00Z');
+        expect(d).not.toBeNull();
+        expect(d.getUTCFullYear()).toBe(2024);
+        expect(d.getUTCMonth()).toBe(0);
+        expect(d.getUTCDate()).toBe(15);
+        expect(d.getUTCHours()).toBe(8);
+    });
+
+    test('带正偏移时区应正确转换为 UTC', () => {
+        const d = parseDateKey('2024-01-15T08:00:00+08:00');
+        expect(d).not.toBeNull();
+        expect(d.getUTCHours()).toBe(0);
+    });
+
+    test('带负偏移时区应正确转换为 UTC', () => {
+        const d = parseDateKey('2024-01-15T00:00:00-08:00');
+        expect(d).not.toBeNull();
+        expect(d.getUTCHours()).toBe(8);
+    });
+
+    test('不带冒号的时区偏移应支持', () => {
+        const d1 = parseDateKey('2024-01-15T08:00:00+0800');
+        const d2 = parseDateKey('2024-01-15T08:00:00+08:00');
+        expect(d1.getTime()).toBe(d2.getTime());
+    });
+
+    test('空值应返回 null', () => {
+        expect(parseDateKey(null)).toBeNull();
+        expect(parseDateKey(undefined)).toBeNull();
+        expect(parseDateKey('')).toBeNull();
+    });
+
+    test('完全无效的字符串应返回 null', () => {
+        expect(parseDateKey('invalid')).toBeNull();
+        expect(parseDateKey('not-a-date')).toBeNull();
+    });
+
+    test('首尾空格应被修剪', () => {
+        const d = parseDateKey('  2024-01-15  ');
+        expect(d).not.toBeNull();
+        expect(d.getFullYear()).toBe(2024);
+    });
+
+    test('非 ISO 格式但可被 Date 解析的字符串应返回 Date', () => {
+        const d = parseDateKey('Jan 15, 2024');
+        expect(d).not.toBeNull();
+        expect(d).toBeInstanceOf(Date);
+    });
+
+    test('数字类型输入应被转为字符串处理并返回 null', () => {
+        expect(parseDateKey(20240115)).toBeNull();
+    });
+});
 
 describe('getWeekRange - 获取周范围', () => {
     test('周一应返回当周范围', () => {
