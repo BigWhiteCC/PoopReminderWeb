@@ -1,12 +1,32 @@
 process.env.JWT_SECRET = 'test-secret-key';
 
+const Database = require('better-sqlite3');
+const jwt = require('jsonwebtoken');
+
+let mockDb;
+jest.mock('./database', () => ({
+    getDb: () => mockDb
+}));
+
 const {
     validateUsername,
     validateEmail,
     validatePassword,
     handleError,
-    escapeHtml
+    escapeHtml,
+    authenticateToken
 } = require('./middleware');
+
+// 构造可链式调用的 mock res
+function makeRes() {
+    const res = {
+        statusCode: 200,
+        body: null,
+        status(code) { this.statusCode = code; return this; },
+        json(payload) { this.body = payload; return this; }
+    };
+    return res;
+}
 
 describe('validateUsername - 用户名验证', () => {
     test('空值应返回错误', () => {
@@ -176,5 +196,123 @@ describe('escapeHtml - HTML转义', () => {
         expect(escaped).not.toContain('<script>');
         expect(escaped).not.toContain('</script>');
         expect(escaped).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
+    });
+});
+
+// ============ 集成测试：authenticateToken 中间件 ============
+// 重点覆盖：密码修改后旧 token 失效（iat + 1秒 < password_changed_at 时拒绝）
+describe('authenticateToken - 中间件集成', () => {
+    let testUserId;
+    const baseTime = new Date('2024-06-15T10:00:00.000Z').getTime();
+
+    beforeAll(() => {
+        mockDb = new Database(':memory:');
+        mockDb.exec(`
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'user',
+                enabled INTEGER DEFAULT 1,
+                password_changed_at TEXT
+            );
+        `);
+        const r = mockDb.prepare(
+            'INSERT INTO users (username, email, password, role, password_changed_at) VALUES (?, ?, ?, ?, ?)'
+        ).run('alice', 'alice@test.com', 'hash', 'user', new Date(baseTime).toISOString());
+        testUserId = r.lastInsertRowid;
+    });
+
+    function callAuth(token) {
+        return new Promise(resolve => {
+            let settled = false;
+            const req = { headers: token ? { authorization: `Bearer ${token}` } : {} };
+            const res = makeRes();
+            authenticateToken(req, res, () => {
+                if (settled) return;
+                settled = true;
+                resolve({ res, nextCalled: true, req });
+            });
+            // jwt.verify 的回调异步触发；给 50ms 让异步链跑完
+            setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    resolve({ res, nextCalled: false, req });
+                }
+            }, 50);
+        });
+    }
+
+    // 生成一个以指定 iat 签发的有效 token
+    // 注意：exp 始终保持在未来 30 天，确保 jwt.verify 不会因过期失败
+    function signAt(userId, iatSec) {
+        const expSec = Math.max(iatSec + 30 * 86400, Math.floor(Date.now() / 1000) + 30 * 86400);
+        return jwt.sign(
+            { userId, username: 'alice', role: 'user', iat: iatSec, exp: expSec },
+            process.env.JWT_SECRET
+        );
+    }
+
+    test('无 token 应返回 401', async () => {
+        const { res, nextCalled } = await callAuth(null);
+        expect(res.statusCode).toBe(401);
+        expect(res.body.error).toBe('Unauthorized');
+        expect(nextCalled).toBe(false);
+    });
+
+    test('无效 token 应返回 403', async () => {
+        const { res, nextCalled } = await callAuth('not-a-jwt');
+        expect(res.statusCode).toBe(403);
+        expect(res.body.error).toBe('Invalid token');
+        expect(nextCalled).toBe(false);
+    });
+
+    test('iat 早于 password_changed_at 应返回 403（强制旧 token 失效）', async () => {
+        // password_changed_at = 2024-06-15T10:00:00Z
+        // 签发 token 时 iat = 2024-01-01（早于密码修改时间）
+        const iatSec = Math.floor(new Date('2024-01-01T00:00:00Z').getTime() / 1000);
+        const forged = signAt(testUserId, iatSec);
+        const { res, nextCalled } = await callAuth(forged);
+        expect(res.statusCode).toBe(403);
+        expect(res.body.error).toBe('Token expired due to password change');
+        expect(nextCalled).toBe(false);
+    });
+
+    test('iat 晚于 password_changed_at 应放行并设置 req.user', async () => {
+        // iat 远晚于 password_changed_at
+        const iatSec = Math.floor(new Date('2024-12-01T00:00:00Z').getTime() / 1000);
+        const newToken = signAt(testUserId, iatSec);
+        const { nextCalled, req } = await callAuth(newToken);
+        expect(nextCalled).toBe(true);
+        expect(req.user.userId).toBe(testUserId);
+    });
+
+    test('iat 处于 1 秒容差窗口内应放行（避免误杀并发请求）', async () => {
+        // password_changed_at = 2024-06-15T10:00:00.000Z
+        // 令 iat = 2024-06-15T09:59:59.500Z（比 changedAt 早 500ms，1秒容差内应放行）
+        const iatSec = Math.floor(new Date('2024-06-15T09:59:59.500Z').getTime() / 1000);
+        const toleranceToken = signAt(testUserId, iatSec);
+        const { nextCalled } = await callAuth(toleranceToken);
+        expect(nextCalled).toBe(true);
+    });
+
+    test('token 中的 userId 在库里不存在应返回 403', async () => {
+        const ghostToken = signAt(99999, Math.floor(Date.now() / 1000));
+        const { res, nextCalled } = await callAuth(ghostToken);
+        expect(res.statusCode).toBe(403);
+        expect(res.body.error).toBe('User not found');
+        expect(nextCalled).toBe(false);
+    });
+
+    test('password_changed_at 为 NULL 时不应触发失效逻辑', async () => {
+        const r = mockDb.prepare(
+            'INSERT INTO users (username, email, password, password_changed_at) VALUES (?, ?, ?, ?)'
+        ).run('bob', 'bob@test.com', 'hash', null);
+        const newId = r.lastInsertRowid;
+        // 哪怕 iat = epoch 0，也不应拒绝（NULL 视为未设置）
+        const oldToken = signAt(newId, 0);
+        const { nextCalled } = await callAuth(oldToken);
+        expect(nextCalled).toBe(true);
     });
 });
