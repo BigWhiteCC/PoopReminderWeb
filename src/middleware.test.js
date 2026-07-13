@@ -1,12 +1,37 @@
 process.env.JWT_SECRET = 'test-secret-key';
 
+const jwt = require('jsonwebtoken');
+
+// ============ 回归缺口：测试实际生产代码 authenticateToken / requireAdmin ============
+// 历史 index.test.js 在测试中复制了一个简化版 authenticateToken，未覆盖：
+//   1) password_changed_at > iat 的 token 失效逻辑（含 1 秒容差）
+//   2) requireAdmin 对非管理员的拒绝
+// 这里通过 mock ./database 把生产代码中的 getDb 注入到内存库，对真实实现做断言。
+
+jest.mock('./database', () => {
+    const Database = require('better-sqlite3');
+    const inMemDb = new Database(':memory:');
+    inMemDb.exec(`
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            password_changed_at TEXT
+        )
+    `);
+    return { getDb: () => inMemDb };
+});
+
 const {
     validateUsername,
     validateEmail,
     validatePassword,
     handleError,
-    escapeHtml
+    escapeHtml,
+    authenticateToken,
+    requireAdmin
 } = require('./middleware');
+
+const { getDb } = require('./database');
 
 describe('validateUsername - 用户名验证', () => {
     test('空值应返回错误', () => {
@@ -176,5 +201,167 @@ describe('escapeHtml - HTML转义', () => {
         expect(escaped).not.toContain('<script>');
         expect(escaped).not.toContain('</script>');
         expect(escaped).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
+    });
+});
+
+// ============ 实际生产代码测试 ============
+
+describe('authenticateToken - 认证中间件（实际生产代码）', () => {
+    let testUserId;
+    const PAST_ISO = '2020-01-01T00:00:00.000Z';
+
+    beforeEach(() => {
+        // 每个用例都重置 users 表，避免互相影响
+        getDb().exec('DELETE FROM users');
+        getDb().exec("DELETE FROM sqlite_sequence WHERE name='users'");
+        const r = getDb().prepare('INSERT INTO users (username, password_changed_at) VALUES (?, ?)').run('fixture_user', PAST_ISO);
+        testUserId = r.lastInsertRowid;
+    });
+
+    // 工具：构造一个 mock req/res 触发中间件
+    function invoke(req) {
+        return new Promise((resolve) => {
+            const res = {
+                statusCode: 200,
+                body: null,
+                status(code) { this.statusCode = code; return this; },
+                json(obj) { this.body = obj; resolve(this); return this; }
+            };
+            const next = jest.fn(() => resolve({ statusCode: 0, next: true }));
+            authenticateToken(req, res, next);
+        });
+    }
+
+    test('无 Authorization 头应返回 401', async () => {
+        const r = await invoke({ headers: {} });
+        expect(r.statusCode).toBe(401);
+        expect(r.body.error).toBe('Unauthorized');
+    });
+
+    test('Authorization 头只有一个字段（无 token 部分）应返回 401', async () => {
+        // "Basic" 不含空格时 split(' ')[1] 为 undefined，触发 401 分支
+        const r = await invoke({ headers: { authorization: 'Basic' } });
+        expect(r.statusCode).toBe(401);
+    });
+
+    test('token 签名错误应返回 403 Invalid token', async () => {
+        const badToken = jwt.sign({ userId: testUserId, username: 'fixture_user' }, 'wrong-secret', { expiresIn: '1h' });
+        const r = await invoke({ headers: { authorization: `Bearer ${badToken}` } });
+        expect(r.statusCode).toBe(403);
+        expect(r.body.error).toBe('Invalid token');
+    });
+
+    test('token 已过期应返回 403 Invalid token', async () => {
+        // expiresIn: 0 在 jsonwebtoken 中会立即过期
+        const expired = jwt.sign({ userId: testUserId, username: 'fixture_user' }, 'test-secret-key', { expiresIn: '0s' });
+        const r = await invoke({ headers: { authorization: `Bearer ${expired}` } });
+        expect(r.statusCode).toBe(403);
+        expect(r.body.error).toBe('Invalid token');
+    });
+
+    test('有效 token 应将 user 挂到 req.user 并调用 next()', async () => {
+        const token = jwt.sign({ userId: testUserId, username: 'fixture_user' }, 'test-secret-key', { expiresIn: '1h' });
+        const result = await invoke({ headers: { authorization: `Bearer ${token}` } });
+        expect(result.next).toBe(true);
+    });
+
+    test('token 中的 userId 在数据库中不存在应返回 403 User not found', async () => {
+        const token = jwt.sign({ userId: 99999, username: 'ghost' }, 'test-secret-key', { expiresIn: '1h' });
+        const r = await invoke({ headers: { authorization: `Bearer ${token}` } });
+        expect(r.statusCode).toBe(403);
+        expect(r.body.error).toBe('User not found');
+    });
+
+    test('关键安全回归：password_changed_at 在 token 签发之后应使 token 失效', async () => {
+        // 步骤 1：在 t0 签发 token
+        const t0 = Math.floor(Date.now() / 1000);
+        const token = jwt.sign(
+            { userId: testUserId, username: 'fixture_user', iat: t0 },
+            'test-secret-key',
+            { expiresIn: '1h' }
+        );
+        // 步骤 2：把 password_changed_at 设为 token 之后 10 秒
+        const future = new Date((t0 + 10) * 1000).toISOString();
+        getDb().prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').run(future, testUserId);
+
+        const r = await invoke({ headers: { authorization: `Bearer ${token}` } });
+        expect(r.statusCode).toBe(403);
+        expect(r.body.error).toBe('Token expired due to password change');
+    });
+
+    test('边界：password_changed_at 在 iat 后 1 秒内（含容差）应放行', async () => {
+        // 容差 = 1000ms；刚好在 iat 之后 ≤1000ms 不应拒绝
+        const t0 = Math.floor(Date.now() / 1000);
+        const token = jwt.sign(
+            { userId: testUserId, username: 'fixture_user', iat: t0 },
+            'test-secret-key',
+            { expiresIn: '1h' }
+        );
+        // iat 是秒级精度；将 changedAt 设为 iat 时刻 + 500ms（小于 1000ms 容差）
+        const withinTolerance = new Date(t0 * 1000 + 500).toISOString();
+        getDb().prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').run(withinTolerance, testUserId);
+
+        const result = await invoke({ headers: { authorization: `Bearer ${token}` } });
+        expect(result.next).toBe(true);
+    });
+
+    test('未发生密码变更（changed_at 早于 iat）应正常放行', async () => {
+        const t0 = Math.floor(Date.now() / 1000);
+        const token = jwt.sign(
+            { userId: testUserId, username: 'fixture_user', iat: t0 },
+            'test-secret-key',
+            { expiresIn: '1h' }
+        );
+        // 留 PAST_ISO（2020年），早于 iat
+        const result = await invoke({ headers: { authorization: `Bearer ${token}` } });
+        expect(result.next).toBe(true);
+    });
+
+    test('password_changed_at 为 NULL 且 iat 存在应放行', async () => {
+        getDb().prepare('UPDATE users SET password_changed_at = NULL WHERE id = ?').run(testUserId);
+        const token = jwt.sign(
+            { userId: testUserId, username: 'fixture_user', iat: Math.floor(Date.now() / 1000) },
+            'test-secret-key',
+            { expiresIn: '1h' }
+        );
+        const result = await invoke({ headers: { authorization: `Bearer ${token}` } });
+        expect(result.next).toBe(true);
+    });
+});
+
+describe('requireAdmin - 管理员权限校验（实际生产代码）', () => {
+    function invoke(req) {
+        return new Promise((resolve) => {
+            const res = {
+                statusCode: 200,
+                body: null,
+                status(code) { this.statusCode = code; return this; },
+                json(obj) { this.body = obj; resolve(this); return this; }
+            };
+            const next = jest.fn(() => resolve({ statusCode: 0, next: true }));
+            requireAdmin(req, res, next);
+        });
+    }
+
+    test('无 req.user 应返回 403', async () => {
+        const r = await invoke({});
+        expect(r.statusCode).toBe(403);
+        expect(r.body.error).toBe('需要管理员权限');
+    });
+
+    test('role 为 user 应返回 403', async () => {
+        const r = await invoke({ user: { userId: 1, role: 'user' } });
+        expect(r.statusCode).toBe(403);
+        expect(r.body.error).toBe('需要管理员权限');
+    });
+
+    test('role 缺失应返回 403', async () => {
+        const r = await invoke({ user: { userId: 1 } });
+        expect(r.statusCode).toBe(403);
+    });
+
+    test('role 为 admin 应调用 next()', async () => {
+        const result = await invoke({ user: { userId: 1, role: 'admin' } });
+        expect(result.next).toBe(true);
     });
 });
