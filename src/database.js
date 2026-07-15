@@ -25,6 +25,7 @@ function initializeDatabase() {
             email TEXT NOT NULL UNIQUE,
             password TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'user',
+            enabled INTEGER DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             password_changed_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
