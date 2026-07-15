@@ -1,6 +1,10 @@
 process.env.JWT_SECRET = 'test-secret-key';
 
+const express = require('express');
+const request = require('supertest');
 const {
+    securityHeaders,
+    setupRateLimiters,
     validateUsername,
     validateEmail,
     validatePassword,
@@ -176,5 +180,90 @@ describe('escapeHtml - HTML转义', () => {
         expect(escaped).not.toContain('<script>');
         expect(escaped).not.toContain('</script>');
         expect(escaped).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
+    });
+});
+
+describe('securityHeaders - 安全头配置', () => {
+    test('应正确设置安全头', async () => {
+        const app = express();
+        securityHeaders(app);
+        app.get('/', (req, res) => res.send('OK'));
+
+        const res = await request(app).get('/');
+        expect(res.headers['x-dns-prefetch-control']).toBeDefined();
+        expect(res.headers['x-xss-protection']).toBeDefined();
+        expect(res.headers['x-content-type-options']).toBeDefined();
+        expect(res.headers['content-security-policy']).toBeDefined();
+    });
+
+    test('CSP 应包含 default-src self', async () => {
+        const app = express();
+        securityHeaders(app);
+        app.get('/', (req, res) => res.send('OK'));
+
+        const res = await request(app).get('/');
+        expect(res.headers['content-security-policy']).toContain("'self'");
+    });
+
+    test('CSP 应包含 script-src self', async () => {
+        const app = express();
+        securityHeaders(app);
+        app.get('/', (req, res) => res.send('OK'));
+
+        const res = await request(app).get('/');
+        expect(res.headers['content-security-policy']).toContain('script-src');
+    });
+
+    test('应禁用 HSTS', async () => {
+        const app = express();
+        securityHeaders(app);
+        app.get('/', (req, res) => res.send('OK'));
+
+        const res = await request(app).get('/');
+        expect(res.headers['strict-transport-security']).toBeUndefined();
+    });
+
+    test('应禁用 upgrade-insecure-requests', async () => {
+        const app = express();
+        securityHeaders(app);
+        app.get('/', (req, res) => res.send('OK'));
+
+        const res = await request(app).get('/');
+        expect(res.headers['content-security-policy']).not.toContain('upgrade-insecure-requests');
+    });
+});
+
+describe('setupRateLimiters - 速率限制配置', () => {
+    test('应返回 authLimiter 和 generalLimiter', () => {
+        const limiters = setupRateLimiters();
+        expect(limiters.authLimiter).toBeDefined();
+        expect(limiters.generalLimiter).toBeDefined();
+    });
+
+    test('authLimiter 应限制请求频率', async () => {
+        const app = express();
+        const { authLimiter } = setupRateLimiters();
+        app.use(express.json());
+        app.post('/login', authLimiter, (req, res) => res.json({ success: true }));
+
+        for (let i = 0; i < 10; i++) {
+            const res = await request(app).post('/login').send({ email: 'test', password: 'test' });
+            expect(res.status).toBe(200);
+        }
+
+        const blockedRes = await request(app).post('/login').send({ email: 'test', password: 'test' });
+        expect(blockedRes.status).toBe(429);
+    });
+
+    test('generalLimiter 应允许更多请求', async () => {
+        const app = express();
+        const { generalLimiter } = setupRateLimiters();
+        app.use(generalLimiter);
+        app.get('/test', (req, res) => res.send('OK'));
+
+        for (let i = 0; i < 50; i++) {
+            const res = await request(app).get('/test');
+            expect(res.status).toBe(200);
+        }
     });
 });
