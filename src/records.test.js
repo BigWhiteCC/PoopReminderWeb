@@ -189,3 +189,63 @@ describe('parseFilterQuery - 筛选解析', () => {
         expect(pt).toBe(0);
     });
 });
+
+// ============ 新增：computeStats 函数实际测试 ============
+describe('computeStats - 统计计算', () => {
+    const { computeStats } = require('./records');
+    
+    test('空记录应返回默认统计', () => {
+        const stats = computeStats([]);
+        expect(stats.total).toBe(0);
+        expect(stats.avgDuration).toBe(0);
+        expect(stats.typeCounts).toEqual({});
+        expect(stats.daily).toEqual([]);
+        expect(stats.weekly).toEqual([]);
+    });
+
+    test('单条记录应正确计算', () => {
+        const records = [
+            { date: '2024-01-15T08:30:00', poopType: 4, duration: 300 }
+        ];
+        const stats = computeStats(records);
+        expect(stats.total).toBe(1);
+        expect(stats.avgDuration).toBe(300);
+        expect(stats.typeCounts[4]).toBe(1);
+    });
+
+    test('多条记录应正确计算', () => {
+        const records = [
+            { date: '2024-01-15T08:00:00', poopType: 4, duration: 300 },
+            { date: '2024-01-15T12:00:00', poopType: 4, duration: 240 },
+            { date: '2024-01-16T08:00:00', poopType: 3, duration: 600 },
+            { date: '2024-01-17T08:00:00', poopType: 5, duration: 120 }
+        ];
+        const stats = computeStats(records);
+        expect(stats.total).toBe(4);
+        expect(stats.avgDuration).toBe(Math.round((300 + 240 + 600 + 120) / 4));
+        expect(stats.typeCounts[4]).toBe(2);
+        expect(stats.typeCounts[3]).toBe(1);
+        expect(stats.typeCounts[5]).toBe(1);
+    });
+
+    test('无时长记录应正确处理', () => {
+        const records = [
+            { date: '2024-01-15T08:00:00', poopType: 4 },
+            { date: '2024-01-16T08:00:00', poopType: 3 }
+        ];
+        const stats = computeStats(records);
+        expect(stats.total).toBe(2);
+        expect(stats.avgDuration).toBe(0);
+    });
+
+    test('按日聚合应正确', () => {
+        const records = [
+            { date: '2024-01-15T08:00:00', poopType: 4, duration: 300 },
+            { date: '2024-01-15T12:00:00', poopType: 3, duration: 240 }
+        ];
+        const stats = computeStats(records);
+        expect(stats.daily.length).toBe(1);
+        expect(stats.daily[0].count).toBe(2);
+        expect(stats.daily[0].avgDuration).toBe(270);
+    });
+});
