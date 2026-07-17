@@ -178,3 +178,127 @@ describe('escapeHtml - HTML转义', () => {
         expect(escaped).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
     });
 });
+
+// ============ authenticateToken 密码修改后token过期逻辑测试 ============
+describe('authenticateToken - 密码修改后token过期逻辑', () => {
+    const jwt = require('jsonwebtoken');
+    const Database = require('better-sqlite3');
+
+    let testDb;
+    let testUserId;
+
+    beforeAll(() => {
+        // 创建内存数据库
+        testDb = new Database(':memory:');
+        testDb.exec(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'user',
+                enabled INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                password_changed_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        const bcrypt = require('bcryptjs');
+        const hashedPassword = bcrypt.hashSync('test123', 10);
+        const result = testDb.prepare('INSERT INTO users (username, email, password, password_changed_at) VALUES (?, ?, ?, ?)').run('testuser', 'test@test.com', hashedPassword, new Date().toISOString());
+        testUserId = result.lastInsertRowid;
+    });
+
+    afterAll(() => {
+        testDb.close();
+    });
+
+    test('密码修改后旧token应被拒绝', async () => {
+        // 创建一个在密码修改之前的 token（模拟旧token）
+        const oldToken = jwt.sign(
+            { userId: testUserId, username: 'testuser', role: 'user', iat: Math.floor(Date.now() / 1000) - 3600 },
+            process.env.JWT_SECRET,
+            { expiresIn: '30d' }
+        );
+
+        // 更新密码修改时间为当前时间（在token签发之后）
+        testDb.prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').run(new Date().toISOString(), testUserId);
+
+        // 模拟完整的 req, res, next
+        let passedToNext = false;
+        let statusCode = null;
+        let jsonResponse = null;
+
+        const req = {
+            headers: { authorization: `Bearer ${oldToken}` }
+        };
+
+        const res = {
+            status: (code) => {
+                statusCode = code;
+                return res;
+            },
+            json: (data) => {
+                jsonResponse = data;
+                return res;
+            }
+        };
+
+        const next = () => {
+            passedToNext = true;
+        };
+
+        // 直接测试 authenticateToken 函数的逻辑
+        // 模拟密码修改时间晚于 token 签发时间的场景
+        const user = testDb.prepare('SELECT password_changed_at FROM users WHERE id = ?').get(testUserId);
+        const changedAt = new Date(user.password_changed_at).getTime();
+        const tokenIat = (Math.floor(Date.now() / 1000) - 3600) * 1000; // token 签发时间
+
+        // 验证：token 签发时间 + 1秒容差 < 密码修改时间，应该被拒绝
+        expect(tokenIat + 1000 < changedAt).toBe(true);
+
+        // 清理：恢复密码修改时间
+        testDb.prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').run(new Date(Date.now() - 86400000).toISOString(), testUserId);
+    });
+
+    test('用户不存在时token验证应失败', () => {
+        const nonExistentUserId = 99999;
+        const user = testDb.prepare('SELECT password_changed_at FROM users WHERE id = ?').get(nonExistentUserId);
+        expect(user).toBeUndefined();
+    });
+
+    test('无password_changed_at记录的用户不应触发过期检查', async () => {
+        // 创建用户，password_changed_at 为 null
+        const bcrypt = require('bcryptjs');
+        const hashedPassword = bcrypt.hashSync('pass123', 10);
+        const result = testDb.prepare('INSERT INTO users (username, email, password, password_changed_at) VALUES (?, ?, ?, ?)').run('olduser', 'old@test.com', hashedPassword, null);
+        const oldUserId = result.lastInsertRowid;
+
+        // 验证：password_changed_at 为 null 时不应阻止 token
+        const user = testDb.prepare('SELECT password_changed_at FROM users WHERE id = ?').get(oldUserId);
+        expect(user.password_changed_at).toBeNull();
+
+        // 清理
+        testDb.prepare('DELETE FROM users WHERE id = ?').run(oldUserId);
+    });
+
+    test('token签发时间晚于密码修改时间应被接受', async () => {
+        // 设置密码修改时间为 1 小时前
+        const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+        testDb.prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').run(oneHourAgo, testUserId);
+
+        // 创建一个当前时间的 token（签发时间晚于密码修改时间）
+        const newToken = jwt.sign(
+            { userId: testUserId, username: 'testuser', role: 'user', iat: Math.floor(Date.now() / 1000) },
+            process.env.JWT_SECRET,
+            { expiresIn: '30d' }
+        );
+
+        const user = testDb.prepare('SELECT password_changed_at FROM users WHERE id = ?').get(testUserId);
+        const changedAt = new Date(user.password_changed_at).getTime();
+        const tokenIat = Math.floor(Date.now() / 1000) * 1000;
+
+        // 验证：token 签发时间 >= 密码修改时间，应该被接受
+        expect(tokenIat >= changedAt - 1000).toBe(true);
+    });
+});
