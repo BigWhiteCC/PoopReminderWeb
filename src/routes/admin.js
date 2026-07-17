@@ -173,10 +173,15 @@ router.delete('/user/:id', authenticateToken, requireAdmin, (req, res) => {
         if (userId === req.user.userId) return res.status(400).json({ error: '不能删除自己' });
         if (user.role === 'admin') return res.status(400).json({ error: '不能删除管理员账号' });
 
-        db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
-        db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
-        db.prepare('DELETE FROM login_logs WHERE user_id = ?').run(userId);
-        db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+        // 使用事务确保数据完整性：要么全部删除成功，要么全部回滚
+        const deleteTransaction = db.transaction(() => {
+            db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM login_logs WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+        });
+
+        deleteTransaction();
 
         addAuditLog(req.user.userId, 'DELETE_USER', 'user', userId, `删除用户: ${user.username}`);
         res.json({ success: true, message: `用户 ${user.username} 已删除` });
@@ -196,7 +201,9 @@ router.post('/user/:id/toggle', authenticateToken, requireAdmin, (req, res) => {
         if (!user) return res.status(404).json({ error: '用户不存在' });
         if (user.role === 'admin') return res.status(400).json({ error: '不能禁用管理员账号' });
 
-        const newEnabled = user.enabled ? 0 : 1;
+        // 正确处理enabled字段可能为NULL的情况：NULL或0表示禁用，1表示启用
+        const currentEnabled = user.enabled === 1;
+        const newEnabled = currentEnabled ? 0 : 1;
         const action = newEnabled ? 'ENABLE_USER' : 'DISABLE_USER';
         db.prepare('UPDATE users SET enabled = ? WHERE id = ?').run(newEnabled, userId);
 

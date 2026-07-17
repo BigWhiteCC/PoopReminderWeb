@@ -74,8 +74,8 @@ router.post('/login', authLimiter, (req, res) => {
             return res.status(401).json({ error: '账号或密码错误' });
         }
 
-        // 检查用户是否被禁用
-        if (user.enabled === 0) {
+        // 检查用户是否被禁用（enabled字段可能为NULL，需显式检查）
+        if (user.enabled !== 1) {
             addLoginLog(user.id, device, false, '用户已被禁用');
             return res.status(403).json({ error: '账号已被禁用，请联系管理员' });
         }

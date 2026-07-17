@@ -198,7 +198,8 @@ beforeAll(() => {
         jwt.verify(token, JWT_SECRET, (err, user) => {
             if (err) return res.status(403).json({ error: 'Invalid token' });
             const userRow = db.prepare('SELECT enabled FROM users WHERE id = ?').get(user.userId);
-            if (!userRow || userRow.enabled === 0) return res.status(403).json({ error: '账号已被禁用，请联系管理员' });
+            // 修复：enabled为NULL或非1时视为禁用
+            if (!userRow || userRow.enabled !== 1) return res.status(403).json({ error: '账号已被禁用，请联系管理员' });
             req.user = user;
             next();
         });
@@ -249,7 +250,8 @@ beforeAll(() => {
         try {
             const user = db.prepare('SELECT * FROM users WHERE email = ? OR username = ?').get(email, email);
             if (!user) return res.status(401).json({ error: '账号或密码错误' });
-            if (user.enabled === 0) return res.status(403).json({ error: '账号已被禁用，请联系管理员' });
+            // 修复：enabled为NULL或非1时视为禁用
+            if (user.enabled !== 1) return res.status(403).json({ error: '账号已被禁用，请联系管理员' });
             const valid = await bcrypt.compare(password, user.password);
             if (!valid) return res.status(401).json({ error: '账号或密码错误' });
             const role = user.role || 'user';
@@ -421,9 +423,16 @@ beforeAll(() => {
             if (!user) return res.status(404).json({ error: '用户不存在' });
             if (userId === req.user.userId) return res.status(400).json({ error: '不能删除自己' });
             if (user.role === 'admin') return res.status(400).json({ error: '不能删除管理员账号' });
-            db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
-            db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
-            db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+
+            // 修复：使用事务确保数据完整性
+            const deleteTransaction = db.transaction(() => {
+                db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM login_logs WHERE user_id = ?').run(userId);
+                db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+            });
+            deleteTransaction();
+
             res.json({ success: true, message: `用户 ${user.username} 已删除` });
         } catch (err) { res.status(500).json({ error: '删除失败' }); }
     });
@@ -434,7 +443,11 @@ beforeAll(() => {
             const user = db.prepare('SELECT id, username, role, enabled FROM users WHERE id = ?').get(userId);
             if (!user) return res.status(404).json({ error: '用户不存在' });
             if (user.role === 'admin') return res.status(400).json({ error: '不能禁用管理员账号' });
-            const newEnabled = user.enabled ? 0 : 1;
+
+            // 修复：正确处理enabled字段可能为NULL的情况
+            const currentEnabled = user.enabled === 1;
+            const newEnabled = currentEnabled ? 0 : 1;
+
             db.prepare('UPDATE users SET enabled = ? WHERE id = ?').run(newEnabled, userId);
             res.json({ success: true, message: `用户 ${user.username} 已${newEnabled ? '启用' : '禁用'}`, enabled: newEnabled });
         } catch (err) { res.status(500).json({ error: '操作失败' }); }
@@ -1132,5 +1145,93 @@ describe('管理员 API - 扩展功能', () => {
         expect(res.body.recordCount).toBeDefined();
         expect(res.body.adminCount).toBeDefined();
         expect(res.body.todayCount).toBeDefined();
+    });
+});
+
+// ============ 缺陷修复验证测试 ============
+describe('关键缺陷修复验证', () => {
+    test('删除用户应确保数据完整性：所有关联数据必须被删除', async () => {
+        // 创建一个新用户并添加关联数据
+        const userId = db.prepare('INSERT INTO users (username, email, password) VALUES (?, ?, ?)')
+            .run('datatest', 'datatest@test.com', bcrypt.hashSync('pass', 10)).lastInsertRowid;
+
+        // 添加设置
+        db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(userId);
+
+        // 添加记录
+        db.prepare('INSERT INTO records (user_id, date, poop_type) VALUES (?, ?, ?)')
+            .run(userId, new Date().toISOString(), 4);
+
+        // 添加登录日志
+        db.prepare('INSERT INTO login_logs (user_id) VALUES (?)').run(userId);
+
+        // 验证数据存在
+        expect(db.prepare('SELECT * FROM users WHERE id = ?').get(userId)).toBeDefined();
+        expect(db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId)).toBeDefined();
+        expect(db.prepare('SELECT * FROM records WHERE user_id = ?').all(userId).length).toBeGreaterThan(0);
+        expect(db.prepare('SELECT * FROM login_logs WHERE user_id = ?').all(userId).length).toBeGreaterThan(0);
+
+        // 删除用户
+        const res = await request(app).delete(`/api/admin/user/${userId}`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(200);
+
+        // 验证所有关联数据都被删除（数据完整性）
+        expect(db.prepare('SELECT * FROM users WHERE id = ?').get(userId)).toBeUndefined();
+        expect(db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId)).toBeUndefined();
+        expect(db.prepare('SELECT * FROM records WHERE user_id = ?').all(userId)).toHaveLength(0);
+        expect(db.prepare('SELECT * FROM login_logs WHERE user_id = ?').all(userId)).toHaveLength(0);
+    });
+
+    test('enabled字段为NULL时登录应被拒绝', async () => {
+        // 创建一个enabled为NULL的用户
+        const userId = db.prepare('INSERT INTO users (username, email, password, enabled) VALUES (?, ?, ?, ?)')
+            .run('nulluser', 'null@test.com', bcrypt.hashSync('pass123', 10), null).lastInsertRowid;
+
+        // 尝试登录应被拒绝（enabled为NULL视为禁用）
+        const res = await request(app).post('/api/login').send({
+            email: 'null@test.com',
+            password: 'pass123'
+        });
+        expect(res.status).toBe(403);
+        expect(res.body.error).toContain('账号已被禁用');
+
+        // 清理
+        db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    });
+
+    test('enabled字段为NULL时禁用/启用功能应正常工作', async () => {
+        // 创建一个enabled为NULL的用户
+        const userId = db.prepare('INSERT INTO users (username, email, password, enabled) VALUES (?, ?, ?, ?)')
+            .run('toggleNullUser', 'toggleNull@test.com', bcrypt.hashSync('pass123', 10), null).lastInsertRowid;
+
+        // 启用该用户（从NULL变为1）
+        const enableRes = await request(app).post(`/api/admin/user/${userId}/toggle`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(enableRes.status).toBe(200);
+        expect(enableRes.body.enabled).toBe(1);
+
+        // 验证可以登录
+        const loginRes = await request(app).post('/api/login').send({
+            email: 'toggleNull@test.com',
+            password: 'pass123'
+        });
+        expect(loginRes.status).toBe(200);
+
+        // 再次禁用
+        const disableRes = await request(app).post(`/api/admin/user/${userId}/toggle`)
+            .set('Authorization', `Bearer ${adminToken}`);
+        expect(disableRes.status).toBe(200);
+        expect(disableRes.body.enabled).toBe(0);
+
+        // 验证无法登录
+        const loginRes2 = await request(app).post('/api/login').send({
+            email: 'toggleNull@test.com',
+            password: 'pass123'
+        });
+        expect(loginRes2.status).toBe(403);
+
+        // 清理
+        db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     });
 });
