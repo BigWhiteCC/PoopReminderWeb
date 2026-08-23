@@ -64,8 +64,10 @@ function verifyUserToken(token, cb) {
         if (err) return cb(err, null);
         try {
             const db = getDb();
-            const row = db.prepare('SELECT password_changed_at FROM users WHERE id = ?').get(payload.userId);
+            const row = db.prepare('SELECT password_changed_at, enabled FROM users WHERE id = ?').get(payload.userId);
             if (!row) return cb(new Error('User not found'), null);
+            // 被管理员禁用的用户：access token 与 refresh token 均立即失效
+            if (row.enabled === 0) return cb(new Error('User disabled'), null);
             if (row.password_changed_at && payload.iat) {
                 const changedAt = new Date(row.password_changed_at).getTime();
                 const issuedAt = payload.iat * 1000;
@@ -90,6 +92,10 @@ function authenticateToken(req, res, next) {
         if (err) {
             // 密码变更或用户不存在 → 403 让前端尝试刷新；token 过期 → 401
             const msg = err.message || '';
+            if (msg === 'User disabled') {
+                // 401 触发前端刷新 → 刷新同样失败 → 清除凭证并跳转登录页，实现立即封禁
+                return res.status(401).json({ error: '账号已被禁用' });
+            }
             if (msg.includes('jwt expired') || msg.includes('jwt malformed')) {
                 return res.status(401).json({ error: 'Token expired' });
             }
