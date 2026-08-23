@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 
 // -------- 加载配置与初始化 --------
-const { IS_DEV } = require('./src/config');
+const { IS_DEV, IS_PROD } = require('./src/config');
 const { initializeDatabase, seedDevData, closeDb } = require('./src/database');
 const { securityHeaders, setupRateLimiters } = require('./src/middleware');
 
@@ -15,6 +15,10 @@ if (IS_DEV) seedDevData();
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// 生产环境在 nginx 反向代理后，必须开启 trust proxy，否则 express-rate-limit
+// 无法从 X-Forwarded-For 正确识别客户端 IP（会抛 ERR_ERL_UNEXPECTED_X_FORWARDED_FOR）
+app.set('trust proxy', IS_PROD ? 1 : false);
 
 // -------- 安全与解析 --------
 securityHeaders(app);

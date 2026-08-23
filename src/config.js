@@ -10,13 +10,16 @@ if (!process.env.JWT_SECRET || !process.env.JWT_SECRET.trim()) {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET.trim();
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+// Access Token：短期（默认 1h），用于 API 认证
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
+// Refresh Token：长期（默认 30d），用于换取新 access token，实现滑动续期
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '30d';
 
 // 环境判断：必须显式设置 NODE_ENV=production 才视为生产环境
 const IS_PROD = process.env.NODE_ENV === 'production';
 const IS_DEV = !IS_PROD;
 
-console.log(`[Config] NODE_ENV=${process.env.NODE_ENV || '(未设置, 使用开发模式)'} JWT_EXPIRES_IN=${JWT_EXPIRES_IN}`);
+console.log(`[Config] NODE_ENV=${process.env.NODE_ENV || '(未设置, 使用开发模式)'} JWT_EXPIRES_IN=${JWT_EXPIRES_IN} JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN}`);
 
 // -------- 布里斯托大便类型常量 --------
 const POOP_TYPES = [
@@ -32,6 +35,7 @@ const POOP_TYPES = [
 module.exports = {
     JWT_SECRET,
     JWT_EXPIRES_IN,
+    JWT_REFRESH_EXPIRES_IN,
     IS_PROD,
     IS_DEV,
     POOP_TYPES

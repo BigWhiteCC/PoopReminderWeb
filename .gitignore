@@ -11,3 +11,5 @@ poopreminder-deploy.tar.gz
 .env.local
 .vscode/
 .idea/
+poopreminder.db-shm
+poopreminder.db-wal

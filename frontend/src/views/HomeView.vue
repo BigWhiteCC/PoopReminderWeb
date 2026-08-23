@@ -14,6 +14,22 @@
     <div class="record-section">
       <h3 v-if="!isPooping" class="section-title-small">准备好就开始吧</h3>
       <div v-if="isPooping" class="timer-display">
+        <!-- 随机笑话卡片：填充上半部分空白 -->
+        <div v-if="currentJoke" class="joke-card" :class="{ 'joke-loading': jokeLoading }">
+          <div class="joke-header">
+            <span class="joke-emoji">🤣</span>
+            <span class="joke-title">拉屎看笑话 · 时间过得快</span>
+            <button class="joke-refresh" type="button" @click="loadJoke" :disabled="jokeLoading" aria-label="换一个笑话">
+              {{ jokeLoading ? '加载中…' : '换一个' }}
+            </button>
+          </div>
+          <div class="joke-content">{{ currentJoke }}</div>
+        </div>
+        <div v-else class="joke-card joke-loading">
+          <div class="joke-skeleton"></div>
+          <div class="joke-skeleton short"></div>
+        </div>
+
         <div class="timer-icon">💩</div>
         <div class="timer-value">{{ formattedElapsed }}</div>
         <div class="timer-label">正在拉屎中...</div>
@@ -172,6 +188,128 @@ const startTime = ref(null)
 const elapsedSeconds = ref(0)
 let ticker = null
 
+// 随机笑话：屎图标上方填充内容
+const currentJoke = ref('')
+const jokeLoading = ref(false)
+
+// 本地备用笑话库（联网失败时使用，保证任何情况都能看到笑话）
+const LOCAL_JOKES = [
+  '为什么程序员总喜欢黑暗模式？因为光吸引 bug。',
+  '面试官：你最大的缺点是什么？我：诚实。面试官：我不觉得诚实是缺点啊。我：我无所谓你怎么想。',
+  '医生说我有严重的强迫症，我说：医生，得是 10 分才行。',
+  '我朋友说他要去北极开火锅店，我说那生意得多冷啊？他说：没事，反正都是凉的。',
+  '为什么海是蓝色的？因为鱼在里面吐泡泡：blue～ blue～',
+  '我问我爸：“爸，我是不是你亲生的？” 我爸：“你再不好好学习，就不是了。”',
+  '有人问我如何在这个混乱的世界保持冷静？我：我一般假装没看见。',
+  '医生：“你这病，得戒游戏。” 我：“那我先戒什么？” 医生：“先戒谢罪。”',
+  '顾客：老板，这菜里怎么有只虫子？老板：别怕，它已经撑死了，吃不了你多少。',
+  '朋友问我最近锻炼怎么样了，我说我每天都做 100 个仰卧起坐——早上从床上爬起来 1 个，晚上躺下 1 个，其余 98 个是在刷短视频的时候翻白眼做的。',
+  '我问老婆：“如果我和你妈同时掉进水里，你先救谁？” 她说：“你先救我妈，我自拍一张。”',
+  '为什么数学书里都是忧郁的故事？因为它们都有太多的问题。',
+  '老板：你被开除了！员工：为什么？老板：你不觉得你每天都来得太晚了吗？员工：我每天都在家把闹钟摁早了啊。',
+  '我决定不再拖延了，打算明天就开始改这个毛病。',
+  '小时候我以为长大后就可以熬夜，长大后发现熬夜真的是成年人的权利，但代价是第二天的一整天。',
+  '减肥成功的秘诀是什么？答：把嘴闭上，把腿打开。（我说的是跑步）',
+  '我的钱包和我本人一样，看起来很空，但里面全是故事（主要是欠别人的）。',
+  '今天我问镜子里的自己：“你到底行不行啊？” 镜子没说话，但它给我比了个中指。',
+  '人生就像拉屎，有时候你很努力了，结果出来的只是个屁。',
+  '拉屎的时候看笑话，据说通便效果+30%，时间过得+50%，快乐指数+100%。',
+  '我不是在摸鱼，我是在进行「创造性发呆」。',
+  '我不是胖，我只是骨架大——外面包了一层厚厚的肉。',
+  '有朋友问我如何在一年内攒够 10 万？我答：很简单，先存 20 万，然后花一半。',
+  '每次看到别人发朋友圈：今天又瘦了 2 斤。我就知道，她刚刚把屎拉完了。',
+  '我妈说我一无是处，我立刻回嘴：不对，我至少还会“事后诸葛亮”。',
+  '有一天我说我要早起，结果我的闹钟同意了，我的身体拒绝了，我的灵魂在旁边嗑瓜子。'
+]
+
+/**
+ * 从多个公共笑话API中随机取一个；失败则回退到本地库。
+ * 网络API的内容是纯文本，便于直接展示。
+ */
+async function fetchRemoteJoke() {
+  const endpoints = [
+    // 笑话集：随机返回一条
+    async () => {
+      const res = await fetch('https://api.apiopen.top/api/getJoke?size=1', { cache: 'no-store' })
+      if (!res.ok) throw new Error('api1 fail')
+      const json = await res.json()
+      const text = json?.result?.[0]?.text || json?.result?.[0]?.content || json?.message
+      if (!text || typeof text !== 'string') throw new Error('api1 empty')
+      return text.trim()
+    },
+    // 小歪API：随机一句话/笑话，需要解析
+    async () => {
+      const res = await fetch('https://api.ixiaowai.cn/twts.php', { cache: 'no-store' })
+      if (!res.ok) throw new Error('api2 fail')
+      const text = await res.text()
+      const clean = (text || '').replace(/<[^>]+>/g, '').trim()
+      if (!clean) throw new Error('api2 empty')
+      return clean
+    },
+    // 韩韩API - 土味/笑话
+    async () => {
+      const res = await fetch('https://api.vvhan.com/api/text/joke?type=text', { cache: 'no-store' })
+      if (!res.ok) throw new Error('api3 fail')
+      const text = await res.text()
+      const clean = (text || '').replace(/<[^>]+>/g, '').trim()
+      if (!clean) throw new Error('api3 empty')
+      return clean
+    },
+    // 一言 Hitokoto 作为备用（不是严格的笑话，但有趣且稳定）
+    async () => {
+      const res = await fetch('https://v1.hitokoto.cn/?c=a&c=d&c=i&c=k&encode=text', { cache: 'no-store' })
+      if (!res.ok) throw new Error('api4 fail')
+      const text = await res.text()
+      const clean = (text || '').trim()
+      if (!clean) throw new Error('api4 empty')
+      return clean
+    }
+  ]
+
+  // 打乱顺序，避免总从同一个API开始
+  const shuffled = [...endpoints].sort(() => Math.random() - 0.5)
+  let lastErr = null
+  for (const fn of shuffled) {
+    try {
+      // 设置 3.5s 超时，避免网络卡顿影响体验
+      const result = await Promise.race([
+        fn(),
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3500))
+      ])
+      if (result && result.length >= 4 && result.length <= 400) return result
+    } catch (e) { lastErr = e }
+  }
+  if (lastErr) throw lastErr
+  throw new Error('all joke endpoints failed')
+}
+
+function getLocalJoke() {
+  const idx = Math.floor(Math.random() * LOCAL_JOKES.length)
+  return LOCAL_JOKES[idx]
+}
+
+async function loadJoke({ forceRemote = false } = {}) {
+  jokeLoading.value = true
+  try {
+    // 如果不强制走网络，先给一个本地笑话（秒开，避免闪烁），
+    // 之后在后台异步替换成网络笑话。
+    let hasLocal = false
+    if (!forceRemote) {
+      currentJoke.value = getLocalJoke()
+      hasLocal = true
+    }
+    try {
+      const remote = await fetchRemoteJoke()
+      if (remote) currentJoke.value = remote
+    } catch (_) {
+      // 网络失败：如果之前没塞本地笑话，这里补一次
+      if (!hasLocal) currentJoke.value = getLocalJoke()
+    }
+  } finally {
+    jokeLoading.value = false
+  }
+}
+
 // 补充记录：日期/时刻上限为“此刻”，按浏览器 datetime-local 要求的 YYYY-MM-DDTHH:mm 格式。
 // 使用 computed 保证每次模板访问都取到最新的当前时间，避免用户在弹窗停留过程中
 // 选到已经过期的时间点。
@@ -219,6 +357,7 @@ function restoreSession() {
     if (data.selectedPoopType) selectedPoopType.value = data.selectedPoopType
     elapsedSeconds.value = Math.floor(elapsed)
     startTicker(true)
+    loadJoke() // 恢复会话后也要刷新笑话（页面刷新后的新内容）
     return true
   } catch (e) {
     clearSession()
@@ -306,6 +445,7 @@ async function handleMainButton() {
   if (!isPooping.value) {
     isPooping.value = true
     startTicker()
+    loadJoke() // 每次点击"开始拉屎"都刷新笑话
     return
   }
   if (!selectedPoopType.value) {
@@ -482,6 +622,87 @@ onBeforeUnmount(() => {
 .timer-display {
   text-align: center; padding: 1rem 0 1.25rem 0;
 }
+/* 笑话卡片：填充倒计时上方空白 */
+.joke-card {
+  position: relative;
+  background: linear-gradient(135deg, #fff8e6 0%, #fff1d6 100%);
+  border: 1.5px solid #ffd98a;
+  border-radius: var(--radius-lg);
+  padding: 0.9rem 1rem 1rem 1rem;
+  margin: 0 0.25rem 1rem 0.25rem;
+  text-align: left;
+  box-shadow: 0 4px 14px rgba(255, 170, 70, 0.15);
+  animation: jokeIn 0.35s ease;
+}
+@keyframes jokeIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.joke-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.55rem;
+}
+.joke-emoji {
+  font-size: 1.15rem;
+  line-height: 1;
+  animation: giggle 1.8s infinite ease-in-out;
+}
+@keyframes giggle {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  25%      { transform: rotate(-8deg) scale(1.08); }
+  75%      { transform: rotate(8deg) scale(1.08); }
+}
+.joke-title {
+  flex: 1;
+  color: #92480a;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+}
+.joke-refresh {
+  appearance: none;
+  border: 1px solid #ffcb6b;
+  background: rgba(255,255,255,0.7);
+  color: #92480a;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease-default), transform 0.1s var(--ease-default);
+  -webkit-tap-highlight-color: transparent;
+}
+.joke-refresh:active:not(:disabled) { transform: scale(0.95); }
+.joke-refresh:disabled { opacity: 0.6; cursor: progress; }
+.joke-refresh:hover:not(:disabled) { background: #fff; }
+
+.joke-content {
+  color: #5d3508;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 2.4em;
+}
+
+/* 骨架屏：笑话未加载完时的占位 */
+.joke-skeleton {
+  width: 100%;
+  height: 0.85rem;
+  background: linear-gradient(90deg, #ffe8b8 0%, #fff2d1 50%, #ffe8b8 100%);
+  background-size: 200% 100%;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  animation: skeletonShimmer 1.4s linear infinite;
+}
+.joke-skeleton.short { width: 60%; }
+@keyframes skeletonShimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
 .timer-icon { font-size: 3rem; margin-bottom: 0.5rem; animation: pulse 1.2s infinite; }
 .timer-value { font-size: 2.5rem; font-weight: 800; color: var(--color-primary); letter-spacing: 2px; }
 .timer-label { font-size: 0.9rem; color: var(--color-text-3); margin-top: 0.25rem; }

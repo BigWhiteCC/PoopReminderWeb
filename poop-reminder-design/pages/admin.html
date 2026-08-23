@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员面板</title>
+    <style id="theme-vars">
+/*
+ * Pinguo design tokens
+ * Brand: Pinguo
+ * Domain: Consumer imaging product
+ * Style: Restrained, elegant, Apple-inspired
+ * Theme mode: light-dark
+ * Source language: zh
+ * Output language: en
+ *
+ * Color architecture (two layers):
+ *   1. Primitive palette - six categories. brand / background / text / icon
+ *      are each a 10-step scale (50 lightest to 900 darkest). state-success and
+ *      state-error are functional colors anchored on Apple system colors.
+ *      Anchors follow Apple Human Interface Guidelines system colors
+ *      (System Blue #007AFF, System Green #34C759, System Red #FF3B30,
+ *      system grays / label / background colors).
+ *   2. Semantic tokens - :root (light) and .dark map roles onto primitives.
+ *      Components and UI kits must only consume the semantic tokens below.
+ */
+
+/* @group-priority: brand, background, text, icon, state-success, state-error */
+
+:root {
+  /* ===== PRIMITIVE PALETTE ===== */
+
+  /* brand */
+  --brand-50: #e8f2ff;
+  --brand-100: #cfe5ff;
+  --brand-200: #9fcbff;
+  --brand-300: #66abff;
+  --brand-400: #2e8dff;
+  --brand-500: #007aff; /* @primary */
+  --brand-600: #0064d6;
+  --brand-700: #004fad;
+  --brand-800: #003b82;
+  --brand-900: #00275a;
+
+  /* background */
+  --background-50: #ffffff;
+  --background-100: #f7f7fa;
+  --background-200: #f2f2f7;
+  --background-300: #e5e5ea;
+  --background-400: #d1d1d6;
+  --background-500: #aeaeb2;
+  --background-600: #8e8e93;
+  --background-700: #3a3a3c;
+  --background-800: #1c1c1e;
+  --background-900: #000000;
+
+  /* text */
+  --text-50: #f5f5f7;
+  --text-100: #e3e3e8;
+  --text-200: #c7c7cc;
+  --text-300: #aeaeb2;
+  --text-400: #8e8e93;
+  --text-500: #6e6e73;
+  --text-600: #48484a;
+  --text-700: #3c3c43;
+  --text-800: #1d1d1f;
+  --text-900: #000000;
+
+  /* icon */
+  --icon-50: #f5f5f7;
+  --icon-100: #e5e5ea;
+  --icon-200: #d1d1d6;
+  --icon-300: #c7c7cc;
+  --icon-400: #aeaeb2;
+  --icon-500: #8e8e93;
+  --icon-600: #6e6e73;
+  --icon-700: #48484a;
+  --icon-800: #2c2c2e;
+  --icon-900: #1d1d1f;
+
+  /* state-success */
+  --state-success: #34c759; /* @primary */
+  --state-success-dark: #30d158;
+  --state-success-surface: #e9f9ee;
+  --state-success-foreground: #ffffff;
+
+  /* state-error */
+  --state-error: #ff3b30; /* @primary */
+  --state-error-dark: #ff453a;
+  --state-error-surface: #ffecea;
+  --state-error-foreground: #ffffff;
+
+  /* ===== SEMANTIC ROLES ===== */
+
+  /* semantic */
+  --background: var(--background-50);
+  --foreground: var(--text-800);
+  --card: var(--background-50);
+  --card-foreground: var(--text-800);
+  --popover: var(--background-50);
+  --popover-foreground: var(--text-900);
+
+  --primary: var(--brand-500);
+  --primary-foreground: var(--background-50);
+  --secondary: var(--background-200);
+  --secondary-foreground: var(--text-800);
+  --muted: var(--background-200);
+  --muted-foreground: var(--text-400);
+  --accent: var(--background-100);
+  --accent-foreground: var(--text-800);
+  --destructive: var(--state-error);
+  --destructive-foreground: var(--state-error-foreground);
+  --success: var(--state-success);
+  --success-foreground: var(--state-success-foreground);
+  --border: var(--background-300);
+  --input: var(--background-400);
+  --ring: var(--brand-500);
+
+  --icon: var(--icon-900);
+  --icon-muted: var(--icon-500);
+
+  /* chart */
+  --chart-1: var(--state-success);
+  --chart-2: var(--brand-500);
+  --chart-3: #ff9500;
+  --chart-4: #5856d6;
+  --chart-5: #af52de;
+
+  /* sidebar */
+  --sidebar: var(--background-200);
+  --sidebar-foreground: var(--text-800);
+  --sidebar-primary: var(--brand-500);
+  --sidebar-primary-foreground: var(--background-50);
+  --sidebar-accent: var(--background-300);
+  --sidebar-accent-foreground: var(--text-800);
+  --sidebar-border: var(--background-300);
+  --sidebar-ring: var(--brand-500);
+
+  /* TYPOGRAPHY */
+  --font-sans: DM Sans, ui-sans-serif, sans-serif, system-ui;
+  --font-serif: DM Sans, ui-sans-serif, sans-serif, system-ui;
+  --font-mono: JetBrains Mono, monospace;
+  --tracking-normal: 0em;
+
+  /* RADIUS */
+  --radius: 1.2rem;
+
+  /* SHADOWS */
+  --shadow-2xs: 0 1px 2px -1px rgba(0, 0, 0, 0.04); /* Hairline */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.04); /* Subtle */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05), 0 1px 3px -1px rgba(0, 0, 0, 0.05); /* Card */
+  --shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.05); /* Raised */
+  --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.05); /* Card Hover */
+  --shadow-lg: 0 8px 24px -8px rgba(0, 0, 0, 0.08), 0 4px 8px -4px rgba(0, 0, 0, 0.05); /* Float */
+  --shadow-xl: 0 16px 40px -10px rgba(0, 0, 0, 0.10), 0 8px 16px -8px rgba(0, 0, 0, 0.06); /* Overlay */
+  --shadow-2xl: 0 24px 64px -12px rgba(0, 0, 0, 0.12); /* Modal */
+
+  /* SPACING */
+  --spacing: 0.24rem;
+}
+
+/* ===== SEMANTIC ROLES - dark (primitive palette inherited) ===== */
+.dark {
+  --background: var(--background-900);
+  --foreground: var(--text-50);
+  --card: var(--background-800);
+  --card-foreground: var(--text-50);
+  --popover: var(--background-700);
+  --popover-foreground: var(--text-50);
+
+  --primary: var(--brand-400);
+  --primary-foreground: var(--background-900);
+  --secondary: var(--background-800);
+  --secondary-foreground: var(--text-50);
+  --muted: var(--background-800);
+  --muted-foreground: var(--text-400);
+  --accent: var(--background-700);
+  --accent-foreground: var(--text-50);
+  --destructive: var(--state-error-dark);
+  --destructive-foreground: var(--state-error-foreground);
+  --success: var(--state-success-dark);
+  --success-foreground: var(--state-success-foreground);
+  --border: var(--background-700);
+  --input: var(--background-700);
+  --ring: var(--brand-400);
+
+  --icon: var(--icon-50);
+  --icon-muted: var(--icon-500);
+
+  --chart-1: var(--state-success-dark);
+  --chart-2: var(--brand-400);
+  --chart-3: #ff9f0a;
+  --chart-4: #5e5ce6;
+  --chart-5: #bf5af2;
+
+  --sidebar: var(--background-800);
+  --sidebar-foreground: var(--text-50);
+  --sidebar-primary: var(--brand-400);
+  --sidebar-primary-foreground: var(--background-900);
+  --sidebar-accent: var(--background-700);
+  --sidebar-accent-foreground: var(--text-50);
+  --sidebar-border: var(--background-700);
+  --sidebar-ring: var(--brand-400);
+
+  --shadow-2xs: 0 1px 2px -1px rgba(0, 0, 0, 0.30);
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.30);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.36), 0 1px 3px -1px rgba(0, 0, 0, 0.36);
+  --shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.40), 0 1px 2px -1px rgba(0, 0, 0, 0.36);
+  --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.44), 0 2px 4px -2px rgba(0, 0, 0, 0.36);
+  --shadow-lg: 0 8px 24px -8px rgba(0, 0, 0, 0.50), 0 4px 8px -4px rgba(0, 0, 0, 0.40);
+  --shadow-xl: 0 16px 40px -10px rgba(0, 0, 0, 0.55), 0 8px 16px -8px rgba(0, 0, 0, 0.44);
+  --shadow-2xl: 0 24px 64px -12px rgba(0, 0, 0, 0.60);
+}
+
+    </style>
+    <style id="component-vars">
+/*
+ * components.css - aggregated component CSS
+ * Auto-extracted from preview/component-*.html files.
+ * DO NOT EDIT. Regenerate with extract-components-css.mjs.
+ *
+ * Foundation tokens live in colors_and_type.css.
+ * This file consumes those tokens via var(--*) references.
+ */
+
+/* ============================================================
+ * Button
+ * source: preview/component-button.html
+ * rules: 10
+ */
+/* @anatomy
+   <div class="row"><span class="label">Primary 56</span><button class="btn btn-primary btn-lg">Buy now</button><button class="btn btn-primary btn-lg" disabled>Buy now</button></div>
+*/
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:calc(var(--spacing)*1.5);height:40px;padding:0 20px;border:none;border-radius:calc(var(--radius)*2);background:transparent;color:var(--foreground);font:600 14px/1 var(--font-sans);letter-spacing:var(--tracking-normal);white-space:nowrap;box-shadow:var(--shadow-sm);cursor:pointer;transition:background-color .18s ease,color .18s ease,opacity .18s ease,filter .18s ease}
+.btn:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+.btn-primary{background:var(--primary);color:var(--primary-foreground)}
+.btn-primary:hover{filter:brightness(.96)}
+.btn-secondary{height:48px;padding:0 24px;background:var(--secondary);color:var(--secondary-foreground)}
+.btn-secondary:hover{background:var(--muted)}
+.btn-text{height:48px;padding:0 4px;box-shadow:none}
+.btn-text:hover{color:var(--primary)}
+.btn-lg{height:56px;padding:0 28px;font-size:16px}
+
+/* ============================================================
+ * Card
+ * source: preview/component-card.html
+ * rules: 12
+ */
+/* @anatomy
+   <div class="row">
+   <span class="label">Info</span>
+   <article class="card">
+   <div><div class="eyebrow">Pinguo Apple</div>
+*/
+.card{width:188px;min-height:148px;padding:calc(var(--spacing)*5);display:flex;flex-direction:column;justify-content:space-between;background:var(--card);color:var(--card-foreground);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-md);transition:transform .18s ease,box-shadow .18s ease}
+.card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+.card.disabled,.card.disabled:hover{opacity:.5;transform:none;box-shadow:var(--shadow-md)}
+.eyebrow,.meta{color:var(--muted-foreground);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.title{margin:6px 0 8px;font-size:18px;line-height:1.15}
+.body-copy{margin:0;color:var(--muted-foreground);font-size:13px}
+.cta{display:inline-flex;align-items:center;justify-content:center;width:max-content;margin-top:12px;padding:calc(var(--spacing)*2) calc(var(--spacing)*3.5);border-radius:999px;background:var(--primary);color:var(--primary-foreground);font-size:12px;font-weight:700;text-decoration:none}
+.media{aspect-ratio:4/3;border-radius:calc(var(--radius) - 4px);background:linear-gradient(135deg,var(--secondary),var(--accent));border:1px solid var(--border)}
+.media-card{min-height:212px;padding:calc(var(--spacing)*4)}
+.media-card .title{font-size:16px;margin:10px 0 6px}
+.price{font-size:12px;color:var(--muted-foreground)}
+.dark{background:var(--card);color:var(--card-foreground)}
+
+/* ============================================================
+ * Comparison Table
+ * source: preview/component-comparison-table.html
+ * rules: 13
+ */
+/* @anatomy
+   <div class="row"><span class="label">Default</span><div class="t"><div class="c m">Compare models</div>
+*/
+.t{display:grid;grid-template-columns:96px repeat(3,1fr);overflow:hidden;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--card-foreground);box-shadow:var(--shadow-sm)}
+.q{grid-template-columns:82px repeat(4,1fr)}
+.c{padding:10px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+.t>.c:nth-child(4n),.q>.c:nth-child(5n){border-right:0}
+.t>.c:nth-last-child(-n+4),.q>.c:nth-last-child(-n+5){border-bottom:0}
+.m{background:var(--background);color:var(--muted-foreground);font:700 10px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase}
+.h{background:var(--background);font-weight:700}
+.k{display:block;font-size:14px;line-height:1.1}
+.s{display:block;margin-top:4px;color:var(--chart-2);font-size:11px;font-weight:700}
+.b .k{color:var(--chart-2)}
+.v{font-weight:600}
+.n{color:var(--muted-foreground);font-size:12px}
+.x{opacity:.45}
+
+/* ============================================================
+ * Input
+ * source: preview/component-input.html
+ * rules: 10
+ */
+/* @anatomy
+   <div class="row">
+   <span class="label">Search 44</span>
+   <div class="field">
+   <span class="icon">⌕</span>
+   <input class="control" aria-label="Search products" placeholder="Search products">
+   <button class="clear" type="button" aria-label="Clear search">×</button>
+   </div>
+*/
+.surface{display:flex;gap:calc(var(--spacing)*2);padding:calc(var(--spacing)*3);border:1px solid var(--border);border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow-sm)}
+.dark{background:var(--background);color:var(--foreground)}
+.field{display:flex;align-items:center;gap:calc(var(--spacing)*2);min-width:240px;height:44px;padding:0 calc(var(--spacing)*3);border:1px solid var(--input);border-radius:var(--radius);background:var(--background);color:var(--foreground);box-shadow:var(--shadow-xs)}
+.field.small{height:40px}
+.field:focus-within{border-color:var(--ring);box-shadow:0 0 0 1px var(--ring)}
+.field.disabled{opacity:.55}
+.icon,.clear{padding:0;border:0;background:transparent;color:var(--icon-muted);font:inherit}
+.icon{font-size:13px}
+.control{flex:1;border:0;outline:0;background:transparent;color:inherit;font:inherit}
+.control::placeholder{color:var(--muted-foreground)}
+
+/* ============================================================
+ * Navigation
+ * source: preview/component-navigation.html
+ * rules: 16
+ */
+/* @anatomy
+   <div class="row"><span class="label">Global 44</span><nav class="webbar dark" aria-label="Pinguo Apple global navigation"><span class="brand">Pinguo Apple</span><div class="rail"><a class="link" href="#">Store</a><a class="link" href="#">Explore</a><a class="link" href="#">Community</a><a class="link" href="#">Support</a></div>
+*/
+.webbar,.mobile{border:1px solid var(--border);box-shadow:var(--shadow-sm)}
+.webbar{display:flex;align-items:center;gap:calc(var(--spacing)*2);min-width:320px;height:44px;padding:0 calc(var(--spacing)*3);border-radius:var(--radius);background:var(--sidebar)}
+.brand{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.link,.tab{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;color:inherit;text-decoration:none;white-space:nowrap;transition:background-color .18s ease,color .18s ease,opacity .18s ease}
+.link{height:32px;padding:0 calc(var(--spacing)*2.5)}
+.link:hover,.tab:hover{background:var(--secondary)}
+.link:focus-visible,.tab:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.dark{background:var(--sidebar);color:var(--foreground)}
+.disabled{opacity:.48}
+.disabled .link,.disabled .tab{pointer-events:none}
+.mobile{padding:calc(var(--spacing)*2);border-radius:calc(var(--radius)*1.1);background:var(--card)}
+.screen{display:flex;align-items:flex-end;justify-content:center;width:188px;height:164px;padding:calc(var(--spacing)*3);border-radius:calc(var(--radius)*.9);background:linear-gradient(180deg,var(--background),var(--secondary))}
+.tabbar{display:flex;gap:calc(var(--spacing)*1.5);padding:calc(var(--spacing)*1.5);border:1px solid var(--border);border-radius:999px;background:var(--card);box-shadow:var(--shadow-md)}
+.tab{flex-direction:column;gap:2px;min-width:56px;height:56px;padding:0 calc(var(--spacing)*1.5);font-size:11px;text-align:center}
+.dot{width:18px;height:18px;border-radius:999px;background:var(--secondary);box-shadow:inset 0 0 0 1px var(--border)}
+.tab:hover .dot{background:var(--primary)}
+
+/* ============================================================
+ * Product Grid
+ * source: preview/component-product-grid.html
+ * rules: 12
+ */
+/* @anatomy
+   <div class="row">
+   <span class="label">4-up</span>
+   <div class="grid grid-4">
+   <article class="card"><div class="media"></div>
+*/
+.grid{display:grid;gap:8px;flex:1}
+.grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.card{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--card-foreground);box-shadow:var(--shadow-xs);transition:border-color .2s ease,transform .2s ease}
+.card:hover{border-color:var(--primary);transform:translateY(-1px)}
+.media{aspect-ratio:1;border-radius:calc(var(--radius) - 4px);background:linear-gradient(135deg,var(--secondary),var(--background));border:1px solid var(--border)}
+.eyebrow{color:var(--muted-foreground);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.title{font-size:15px;line-height:1.25}
+.price{font-variant-numeric:tabular-nums}
+.cta{display:inline-flex;align-self:flex-start;padding:7px 10px;border-radius:999px;background:var(--primary);color:var(--primary-foreground);font-size:12px;text-decoration:none}
+.muted{color:var(--muted-foreground)}
+.is-disabled{opacity:.55}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  
+  @layer base {
+    body { background: var(--apple-background); color: var(--apple-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main>
+      <!-- Navigation -->
+      <nav class="w-full sticky top-0 z-50 border-b" style="background:var(--background-200);border-color:var(--background-300);">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14">
+          <a href="#" data-dom-id="nav-home" class="text-lg font-bold truncate" style="color:var(--text-800);">拉屎提醒</a>
+          <div class="flex items-center gap-1">
+            <a href="#" data-dom-id="nav-home" class="inline-flex items-center justify-center h-8 px-3 rounded-full text-sm whitespace-nowrap transition-colors duration-150" style="color:var(--text-700);font-family:var(--font-sans);">首页</a>
+            <a href="#" data-dom-id="nav-weekly" class="inline-flex items-center justify-center h-8 px-3 rounded-full text-sm whitespace-nowrap transition-colors duration-150" style="color:var(--text-700);font-family:var(--font-sans);">周</a>
+            <a href="#" data-dom-id="nav-history" class="inline-flex items-center justify-center h-8 px-3 rounded-full text-sm whitespace-nowrap transition-colors duration-150" style="color:var(--text-700);font-family:var(--font-sans);">明细</a>
+            <a href="#" data-dom-id="nav-settings" class="inline-flex items-center justify-center h-8 px-3 rounded-full text-sm whitespace-nowrap transition-colors duration-150" style="color:var(--text-700);font-family:var(--font-sans);">设置</a>
+            <a href="#" data-dom-id="nav-admin" class="inline-flex items-center justify-center h-8 px-3 rounded-full text-sm whitespace-nowrap" style="background:var(--primary);color:var(--primary-foreground);font-family:var(--font-sans);">管理</a>
+          </div>
+        </div>
+      </nav>
+
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Page Title -->
+        <div class="mb-8">
+          <h1 class="text-2xl font-semibold tracking-tight" style="color:var(--text-800);font-family:var(--font-sans);">管理员面板</h1>
+          <p class="mt-1 text-sm" style="color:var(--text-500);font-family:var(--font-sans);">用户管理、记录审核与系统日志</p>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div class="p-5 rounded-xl" style="background:var(--background-50);border:1px solid var(--background-300);">
+            <p class="text-xs font-medium truncate" style="color:var(--text-500);font-family:var(--font-sans);">注册用户</p>
+            <p class="mt-2 text-3xl font-semibold whitespace-nowrap tabular-nums" style="color:var(--text-800);font-family:var(--font-sans);font-variant-numeric:tabular-nums;">128</p>
+          </div>
+          <div class="p-5 rounded-xl" style="background:var(--background-50);border:1px solid var(--background-300);">
+            <p class="text-xs font-medium truncate" style="color:var(--text-500);font-family:var(--font-sans);">总记录数</p>
+            <p class="mt-2 text-3xl font-semibold whitespace-nowrap tabular-nums" style="color:var(--text-800);font-family:var(--font-sans);font-variant-numeric:tabular-nums;">3,456</p>
+          </div>
+          <div class="p-5 rounded-xl" style="background:var(--background-50);border:1px solid var(--background-300);">
+            <p class="text-xs font-medium truncate" style="color:var(--text-500);font-family:var(--font-sans);">今日新增</p>
+            <p class="mt-2 text-3xl font-semibold whitespace-nowrap tabular-nums" style="color:var(--brand-500);font-family:var(--font-sans);font-variant-numeric:tabular-nums;">42</p>
+          </div>
+          <div class="p-5 rounded-xl" style="background:var(--background-50);border:1px solid var(--background-300);">
+            <p class="text-xs font-medium truncate" style="color:var(--text-500);font-family:var(--font-sans);">管理员</p>
+            <p class="mt-2 text-3xl font-semibold whitespace-nowrap tabular-nums" style="color:var(--text-800);font-family:var(--font-sans);font-variant-numeric:tabular-nums;">3</p>
+          </div>
+        </div>
+
+        <!-- Tab Bar -->
+        <div class="flex gap-2 mb-6 p-1.5 rounded-xl" style="background:var(--background-200);">
+          <button type="button" role="tab" aria-selected="true" class="inline-flex items-center justify-center h-9 px-4 rounded-lg text-sm font-medium whitespace-nowrap" style="background:var(--background-50);color:var(--text-800);font-family:var(--font-sans);box-shadow:var(--shadow-sm);">用户管理</button>
+          <button type="button" role="tab" aria-selected="false" class="inline-flex items-center justify-center h-9 px-4 rounded-lg text-sm font-medium whitespace-nowrap" style="background:transparent;color:var(--text-500);font-family:var(--font-sans);">登录日志</button>
+          <button type="button" role="tab" aria-selected="false" class="inline-flex items-center justify-center h-9 px-4 rounded-lg text-sm font-medium whitespace-nowrap" style="background:transparent;color:var(--text-500);font-family:var(--font-sans);">审计日志</button>
+        </div>
+
+        <!-- Tab 1: User Management -->
+        <div role="tabpanel">
+          <!-- User Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
+            <!-- User Card 1 -->
+            <div class="p-5 rounded-xl" style="background:var(--background-50);border:1px solid var(--background-300);">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-base font-semibold truncate" style="color:var(--text-800);font-family:var(--font-sans);">张三</h3>
+                <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--brand-50);color:var(--brand-500);font-family:var(--font-sans);">管理员</span>
+              </div>
+              <p class="text-xs truncate mb-3" style="color:var(--text-500);font-family:var(--font-sans);">zhangsan@example.com</p>
+              <div class="flex gap-4 mb-4">
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">256 条记录</span>
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">2024-01-15</span>
+              </div>
+              <div class="flex gap-2">
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-700);font-family:var(--font-sans);">重置密码</button>
+              </div>
+            </div>
+            <!-- User Card 2 -->
+            <div class="p-5 rounded-xl" style="background:var(--background-50);border:1px solid var(--background-300);">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-base font-semibold truncate" style="color:var(--text-800);font-family:var(--font-sans);">李四</h3>
+                <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-500);font-family:var(--font-sans);">普通用户</span>
+              </div>
+              <p class="text-xs truncate mb-3" style="color:var(--text-500);font-family:var(--font-sans);">lisi@example.com</p>
+              <div class="flex gap-4 mb-4">
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">89 条记录</span>
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">2024-03-22</span>
+              </div>
+              <div class="flex gap-2">
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-700);font-family:var(--font-sans);">重置密码</button>
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-success-surface);color:var(--state-success);font-family:var(--font-sans);">禁用</button>
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);font-family:var(--font-sans);">删除</button>
+              </div>
+            </div>
+            <!-- User Card 3 -->
+            <div class="p-5 rounded-xl" style="background:var(--background-50);border:1px solid var(--background-300);">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-base font-semibold truncate" style="color:var(--text-800);font-family:var(--font-sans);">王五</h3>
+                <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-500);font-family:var(--font-sans);">普通用户</span>
+              </div>
+              <p class="text-xs truncate mb-3" style="color:var(--text-500);font-family:var(--font-sans);">wangwu@example.com</p>
+              <div class="flex gap-4 mb-4">
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">45 条记录</span>
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">2024-06-10</span>
+              </div>
+              <div class="flex gap-2">
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-700);font-family:var(--font-sans);">重置密码</button>
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-success-surface);color:var(--state-success);font-family:var(--font-sans);">禁用</button>
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);font-family:var(--font-sans);">删除</button>
+              </div>
+            </div>
+            <!-- User Card 4 - Disabled -->
+            <div class="p-5 rounded-xl opacity-50" style="background:var(--background-50);border:1px solid var(--background-300);">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-base font-semibold truncate" style="color:var(--text-800);font-family:var(--font-sans);">赵六</h3>
+                <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-300);color:var(--text-500);font-family:var(--font-sans);">已禁用</span>
+              </div>
+              <p class="text-xs truncate mb-3" style="color:var(--text-500);font-family:var(--font-sans);">zhaoliu@example.com</p>
+              <div class="flex gap-4 mb-4">
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">12 条记录</span>
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">2024-08-01</span>
+              </div>
+              <div class="flex gap-2">
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-success-surface);color:var(--state-success);font-family:var(--font-sans);">启用</button>
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);font-family:var(--font-sans);">删除</button>
+              </div>
+            </div>
+            <!-- User Card 5 -->
+            <div class="p-5 rounded-xl" style="background:var(--background-50);border:1px solid var(--background-300);">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-base font-semibold truncate" style="color:var(--text-800);font-family:var(--font-sans);">陈七</h3>
+                <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-500);font-family:var(--font-sans);">普通用户</span>
+              </div>
+              <p class="text-xs truncate mb-3" style="color:var(--text-500);font-family:var(--font-sans);">chenqi@example.com</p>
+              <div class="flex gap-4 mb-4">
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">67 条记录</span>
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">2024-05-18</span>
+              </div>
+              <div class="flex gap-2">
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-700);font-family:var(--font-sans);">重置密码</button>
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-success-surface);color:var(--state-success);font-family:var(--font-sans);">禁用</button>
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);font-family:var(--font-sans);">删除</button>
+              </div>
+            </div>
+            <!-- User Card 6 -->
+            <div class="p-5 rounded-xl" style="background:var(--background-50);border:1px solid var(--background-300);">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-base font-semibold truncate" style="color:var(--text-800);font-family:var(--font-sans);">孙八</h3>
+                <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-500);font-family:var(--font-sans);">普通用户</span>
+              </div>
+              <p class="text-xs truncate mb-3" style="color:var(--text-500);font-family:var(--font-sans);">sunba@example.com</p>
+              <div class="flex gap-4 mb-4">
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">34 条记录</span>
+                <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">2024-09-03</span>
+              </div>
+              <div class="flex gap-2">
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-700);font-family:var(--font-sans);">重置密码</button>
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-success-surface);color:var(--state-success);font-family:var(--font-sans);">禁用</button>
+                <button class="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);font-family:var(--font-sans);">删除</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter Bar -->
+          <div class="p-5 rounded-xl mb-6" style="background:var(--background-50);border:1px solid var(--background-300);">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+              <div>
+                <label class="block text-xs font-medium mb-1.5" style="color:var(--text-500);font-family:var(--font-sans);">开始日期</label>
+                <input type="date" class="w-full h-10 px-3 rounded-lg text-sm" style="border:1px solid var(--background-300);background:var(--background-50);color:var(--text-800);font-family:var(--font-sans);" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium mb-1.5" style="color:var(--text-500);font-family:var(--font-sans);">结束日期</label>
+                <input type="date" class="w-full h-10 px-3 rounded-lg text-sm" style="border:1px solid var(--background-300);background:var(--background-50);color:var(--text-800);font-family:var(--font-sans);" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium mb-1.5" style="color:var(--text-500);font-family:var(--font-sans);">大便类型</label>
+                <select class="w-full h-10 px-3 rounded-lg text-sm" style="border:1px solid var(--background-300);background:var(--background-50);color:var(--text-800);font-family:var(--font-sans);">
+                  <option>全部</option>
+                  <option>第1型</option>
+                  <option>第2型</option>
+                  <option>第3型</option>
+                  <option>第4型</option>
+                  <option>第5型</option>
+                  <option>第6型</option>
+                  <option>第7型</option>
+                </select>
+              </div>
+              <button class="inline-flex items-center justify-center h-10 px-5 rounded-lg text-sm font-medium whitespace-nowrap" style="background:var(--primary);color:var(--primary-foreground);font-family:var(--font-sans);">查询</button>
+              <button class="inline-flex items-center justify-center h-10 px-5 rounded-lg text-sm font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-700);font-family:var(--font-sans);">重置</button>
+            </div>
+          </div>
+
+          <!-- Records List -->
+          <div class="rounded-xl overflow-hidden" style="background:var(--background-50);border:1px solid var(--background-300);">
+            <div class="p-5 flex items-center justify-between" style="border-bottom:1px solid var(--background-300);">
+              <h2 class="text-base font-semibold" style="color:var(--text-800);font-family:var(--font-sans);">记录详情</h2>
+              <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">共 3,456 条</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm" style="font-family:var(--font-sans);">
+                <thead>
+                  <tr style="background:var(--background-200);">
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">用户</th>
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">类型</th>
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">时间</th>
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">时长</th>
+                    <th class="text-right px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3">
+                      <div class="text-sm font-medium truncate" style="color:var(--text-800);">张三</div>
+                      <div class="text-xs truncate" style="color:var(--text-400);">zhangsan@example.com</div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-600);">第4型</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-28 08:30</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">5 分 23 秒</td>
+                    <td class="px-4 py-3 text-right">
+                      <button class="inline-flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);">删除</button>
+                    </td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3">
+                      <div class="text-sm font-medium truncate" style="color:var(--text-800);">李四</div>
+                      <div class="text-xs truncate" style="color:var(--text-400);">lisi@example.com</div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-600);">第3型</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-28 09:15</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">3 分 48 秒</td>
+                    <td class="px-4 py-3 text-right">
+                      <button class="inline-flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);">删除</button>
+                    </td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3">
+                      <div class="text-sm font-medium truncate" style="color:var(--text-800);">王五</div>
+                      <div class="text-xs truncate" style="color:var(--text-400);">wangwu@example.com</div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-600);">第5型</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-27 20:45</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">8 分 12 秒</td>
+                    <td class="px-4 py-3 text-right">
+                      <button class="inline-flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);">删除</button>
+                    </td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3">
+                      <div class="text-sm font-medium truncate" style="color:var(--text-800);">陈七</div>
+                      <div class="text-xs truncate" style="color:var(--text-400);">chenqi@example.com</div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-600);">第1型</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-27 14:20</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">12 分 05 秒</td>
+                    <td class="px-4 py-3 text-right">
+                      <button class="inline-flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);">删除</button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">
+                      <div class="text-sm font-medium truncate" style="color:var(--text-800);">孙八</div>
+                      <div class="text-xs truncate" style="color:var(--text-400);">sunba@example.com</div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-600);">第6型</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-26 07:55</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2 分 30 秒</td>
+                    <td class="px-4 py-3 text-right">
+                      <button class="inline-flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <!-- Pagination -->
+            <div class="flex items-center justify-between px-5 py-3" style="border-top:1px solid var(--background-300);">
+              <button class="inline-flex items-center justify-center h-8 px-4 rounded-lg text-xs font-medium whitespace-nowrap opacity-50" style="background:var(--background-200);color:var(--text-500);font-family:var(--font-sans);" disabled>上一页</button>
+              <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">1 - 50 / 3,456</span>
+              <button class="inline-flex items-center justify-center h-8 px-4 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-700);font-family:var(--font-sans);">下一页</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Login Logs (hidden) -->
+        <div role="tabpanel" class="hidden">
+          <div class="rounded-xl overflow-hidden" style="background:var(--background-50);border:1px solid var(--background-300);">
+            <div class="p-5" style="border-bottom:1px solid var(--background-300);">
+              <h2 class="text-base font-semibold mb-4" style="color:var(--text-800);font-family:var(--font-sans);">登录日志</h2>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                <div>
+                  <label class="block text-xs font-medium mb-1.5" style="color:var(--text-500);font-family:var(--font-sans);">开始日期</label>
+                  <input type="date" class="w-full h-10 px-3 rounded-lg text-sm" style="border:1px solid var(--background-300);background:var(--background-50);color:var(--text-800);font-family:var(--font-sans);" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1.5" style="color:var(--text-500);font-family:var(--font-sans);">结束日期</label>
+                  <input type="date" class="w-full h-10 px-3 rounded-lg text-sm" style="border:1px solid var(--background-300);background:var(--background-50);color:var(--text-800);font-family:var(--font-sans);" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1.5" style="color:var(--text-500);font-family:var(--font-sans);">用户</label>
+                  <select class="w-full h-10 px-3 rounded-lg text-sm" style="border:1px solid var(--background-300);background:var(--background-50);color:var(--text-800);font-family:var(--font-sans);">
+                    <option>全部</option>
+                    <option>张三</option>
+                    <option>李四</option>
+                    <option>王五</option>
+                  </select>
+                </div>
+                <button class="inline-flex items-center justify-center h-10 px-5 rounded-lg text-sm font-medium whitespace-nowrap" style="background:var(--primary);color:var(--primary-foreground);font-family:var(--font-sans);">查询</button>
+                <button class="inline-flex items-center justify-center h-10 px-5 rounded-lg text-sm font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-700);font-family:var(--font-sans);">重置</button>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm" style="font-family:var(--font-sans);">
+                <thead>
+                  <tr style="background:var(--background-200);">
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">状态</th>
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">用户</th>
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">设备</th>
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-success-surface);color:var(--state-success);">成功</span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <div class="text-sm font-medium truncate" style="color:var(--text-800);">张三</div>
+                      <div class="text-xs truncate" style="color:var(--text-400);">zhangsan@example.com</div>
+                    </td>
+                    <td class="px-4 py-3 text-xs truncate" style="color:var(--text-600);">Chrome / macOS</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-28 08:25</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);">失败</span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <div class="text-sm font-medium truncate" style="color:var(--text-800);">未知用户</div>
+                      <div class="text-xs truncate" style="color:var(--text-400);">test@fake.com</div>
+                    </td>
+                    <td class="px-4 py-3 text-xs truncate" style="color:var(--text-600);">Safari / iOS</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-28 07:50</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-success-surface);color:var(--state-success);">成功</span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <div class="text-sm font-medium truncate" style="color:var(--text-800);">李四</div>
+                      <div class="text-xs truncate" style="color:var(--text-400);">lisi@example.com</div>
+                    </td>
+                    <td class="px-4 py-3 text-xs truncate" style="color:var(--text-600);">Firefox / Windows</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-27 22:10</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-success-surface);color:var(--state-success);">成功</span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <div class="text-sm font-medium truncate" style="color:var(--text-800);">王五</div>
+                      <div class="text-xs truncate" style="color:var(--text-400);">wangwu@example.com</div>
+                    </td>
+                    <td class="px-4 py-3 text-xs truncate" style="color:var(--text-600);">Chrome / Android</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-27 19:30</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);">失败</span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <div class="text-sm font-medium truncate" style="color:var(--text-800);">赵六</div>
+                      <div class="text-xs truncate" style="color:var(--text-400);">zhaoliu@example.com</div>
+                    </td>
+                    <td class="px-4 py-3 text-xs truncate" style="color:var(--text-600);">Chrome / macOS</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-27 15:45</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="flex items-center justify-between px-5 py-3" style="border-top:1px solid var(--background-300);">
+              <button class="inline-flex items-center justify-center h-8 px-4 rounded-lg text-xs font-medium whitespace-nowrap opacity-50" style="background:var(--background-200);color:var(--text-500);font-family:var(--font-sans);" disabled>上一页</button>
+              <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">1 - 50 / 256</span>
+              <button class="inline-flex items-center justify-center h-8 px-4 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-700);font-family:var(--font-sans);">下一页</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Audit Logs (hidden) -->
+        <div role="tabpanel" class="hidden">
+          <div class="rounded-xl overflow-hidden" style="background:var(--background-50);border:1px solid var(--background-300);">
+            <div class="p-5" style="border-bottom:1px solid var(--background-300);">
+              <h2 class="text-base font-semibold mb-4" style="color:var(--text-800);font-family:var(--font-sans);">审计日志</h2>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                <div>
+                  <label class="block text-xs font-medium mb-1.5" style="color:var(--text-500);font-family:var(--font-sans);">开始日期</label>
+                  <input type="date" class="w-full h-10 px-3 rounded-lg text-sm" style="border:1px solid var(--background-300);background:var(--background-50);color:var(--text-800);font-family:var(--font-sans);" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1.5" style="color:var(--text-500);font-family:var(--font-sans);">结束日期</label>
+                  <input type="date" class="w-full h-10 px-3 rounded-lg text-sm" style="border:1px solid var(--background-300);background:var(--background-50);color:var(--text-800);font-family:var(--font-sans);" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1.5" style="color:var(--text-500);font-family:var(--font-sans);">操作类型</label>
+                  <select class="w-full h-10 px-3 rounded-lg text-sm" style="border:1px solid var(--background-300);background:var(--background-50);color:var(--text-800);font-family:var(--font-sans);">
+                    <option>全部</option>
+                    <option>重置密码</option>
+                    <option>删除用户</option>
+                    <option>禁用用户</option>
+                    <option>启用用户</option>
+                    <option>删除记录</option>
+                  </select>
+                </div>
+                <button class="inline-flex items-center justify-center h-10 px-5 rounded-lg text-sm font-medium whitespace-nowrap" style="background:var(--primary);color:var(--primary-foreground);font-family:var(--font-sans);">查询</button>
+                <button class="inline-flex items-center justify-center h-10 px-5 rounded-lg text-sm font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-700);font-family:var(--font-sans);">重置</button>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm" style="font-family:var(--font-sans);">
+                <thead>
+                  <tr style="background:var(--background-200);">
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">操作人</th>
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">操作</th>
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">详情</th>
+                    <th class="text-left px-4 py-3 text-xs font-medium whitespace-nowrap" style="color:var(--text-500);">时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium" style="color:var(--text-800);">张三</td>
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--brand-50);color:var(--brand-500);">重置密码</span>
+                    </td>
+                    <td class="px-4 py-3 text-xs truncate" style="color:var(--text-500);">为用户「李四」重置密码</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-28 10:00</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium" style="color:var(--text-800);">张三</td>
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);">禁用用户</span>
+                    </td>
+                    <td class="px-4 py-3 text-xs truncate" style="color:var(--text-500);">禁用用户「赵六」</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-27 16:30</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium" style="color:var(--text-800);">张三</td>
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);">删除记录</span>
+                    </td>
+                    <td class="px-4 py-3 text-xs truncate" style="color:var(--text-500);">删除记录 #1234</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-27 14:20</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--background-300);">
+                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium" style="color:var(--text-800);">张三</td>
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-success-surface);color:var(--state-success);">启用用户</span>
+                    </td>
+                    <td class="px-4 py-3 text-xs truncate" style="color:var(--text-500);">启用用户「test_user」</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-26 09:15</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium" style="color:var(--text-800);">张三</td>
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center justify-center h-5 px-2 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--state-error-surface);color:var(--state-error);">删除用户</span>
+                    </td>
+                    <td class="px-4 py-3 text-xs truncate" style="color:var(--text-500);">删除用户「spam_account」</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs" style="color:var(--text-500);">2025-06-25 11:40</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="flex items-center justify-between px-5 py-3" style="border-top:1px solid var(--background-300);">
+              <button class="inline-flex items-center justify-center h-8 px-4 rounded-lg text-xs font-medium whitespace-nowrap opacity-50" style="background:var(--background-200);color:var(--text-500);font-family:var(--font-sans);" disabled>上一页</button>
+              <span class="text-xs whitespace-nowrap" style="color:var(--text-400);font-family:var(--font-sans);">1 - 50 / 128</span>
+              <button class="inline-flex items-center justify-center h-8 px-4 rounded-lg text-xs font-medium whitespace-nowrap" style="background:var(--background-200);color:var(--text-700);font-family:var(--font-sans);">下一页</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <footer class="mt-16 py-6 text-center" style="border-top:1px solid var(--background-300);">
+        <p class="text-xs" style="color:var(--text-400);font-family:var(--font-sans);">拉屎提醒 / 健康追踪工具</p>
+      </footer>
+    </main>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

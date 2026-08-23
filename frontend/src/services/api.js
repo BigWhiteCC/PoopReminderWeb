@@ -9,6 +9,56 @@ class ApiError extends Error {
   }
 }
 
+// -------- 滑动续期：用 refresh token 换取新 access token --------
+// 并发锁：多个请求同时 401 时，只发起一次刷新，其它请求共享同一个 Promise
+let refreshPromise = null
+
+function clearAuthAndRedirect() {
+  localStorage.removeItem('token')
+  localStorage.removeItem('refreshToken')
+  localStorage.removeItem('user')
+  // 避免在登录页重复跳转
+  if (!window.location.pathname.endsWith('/login')) {
+    window.location.href = '/login'
+  }
+}
+
+async function refreshAccessToken() {
+  // 已有刷新在进行中则复用
+  if (refreshPromise) return refreshPromise
+
+  const refreshToken = localStorage.getItem('refreshToken')
+  if (!refreshToken) {
+    clearAuthAndRedirect()
+    throw new ApiError('会话已过期，请重新登录', 401, 'UNAUTHORIZED')
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken })
+      })
+      if (!res.ok) throw new Error('refresh failed')
+      const data = await res.json()
+      if (data && data.token) {
+        localStorage.setItem('token', data.token)
+        return data.token
+      }
+      throw new Error('no token in refresh response')
+    } catch (e) {
+      clearAuthAndRedirect()
+      throw new ApiError('会话已过期，请重新登录', 401, 'UNAUTHORIZED')
+    } finally {
+      // 释放锁，供后续可能的刷新使用
+      refreshPromise = null
+    }
+  })()
+
+  return refreshPromise
+}
+
 async function request(url, options = {}) {
   try {
     const token = localStorage.getItem('token')
@@ -17,7 +67,20 @@ async function request(url, options = {}) {
       options.headers['Authorization'] = `Bearer ${token}`
     }
 
-    const res = await fetch(url, options)
+    let res = await fetch(url, options)
+
+    // access token 过期 → 自动刷新并重放原请求（只重放一次）
+    if (res.status === 401 && !options._retried) {
+      try {
+        const newToken = await refreshAccessToken()
+        options._retried = true
+        options.headers['Authorization'] = `Bearer ${newToken}`
+        res = await fetch(url, options)
+      } catch (e) {
+        // 刷新失败已在 refreshAccessToken 内跳转登录页
+        throw e
+      }
+    }
 
     if (!res.ok) {
       let errorMessage = '请求失败'
@@ -33,13 +96,12 @@ async function request(url, options = {}) {
           errorType = 'BAD_REQUEST'
           break
         case 401:
-          localStorage.removeItem('token')
-          localStorage.removeItem('user')
+          clearAuthAndRedirect()
           errorMessage = '未授权，请重新登录'
           errorType = 'UNAUTHORIZED'
           break
         case 403:
-          errorMessage = '无权限访问'
+          errorMessage = (serverError && serverError.error) || '无权限访问'
           errorType = 'FORBIDDEN'
           break
         case 404:
@@ -171,18 +233,32 @@ export const api = {
 
   // 导出：直接返回 Blob 下载（绕过通用 request，因为响应不是 JSON）
   async exportRecords({ range, format, start, end, poop_type } = {}) {
-    const token = localStorage.getItem('token')
-    const params = new URLSearchParams()
-    if (range) params.append('range', range)
-    if (format) params.append('format', format)
-    if (start) params.append('start', start)
-    if (end) params.append('end', end)
-    if (poop_type) params.append('poop_type', String(poop_type))
+    const doFetch = async (authToken) => {
+      const params = new URLSearchParams()
+      if (range) params.append('range', range)
+      if (format) params.append('format', format)
+      if (start) params.append('start', start)
+      if (end) params.append('end', end)
+      if (poop_type) params.append('poop_type', String(poop_type))
 
-    const url = `${API_BASE}/record/export?${params.toString()}`
-    const res = await fetch(url, {
-      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-    })
+      const url = `${API_BASE}/record/export?${params.toString()}`
+      const res = await fetch(url, {
+        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+      })
+      return res
+    }
+
+    let token = localStorage.getItem('token')
+    let res = await doFetch(token)
+    // access token 过期 → 刷新后重放一次
+    if (res.status === 401) {
+      try {
+        const newToken = await refreshAccessToken()
+        res = await doFetch(newToken)
+      } catch (e) {
+        throw new ApiError('导出失败：会话已过期', 401, 'UNAUTHORIZED')
+      }
+    }
     if (!res.ok) throw new ApiError('导出失败', res.status)
     const blob = await res.blob()
     // 从 Content-Disposition 获取文件名
@@ -385,4 +461,4 @@ function formatDurationShort(seconds) {
   return `${Math.round(n)} 秒`;
 }
 
-export { ApiError, formatDuration, formatDurationShort };
+export { ApiError, formatDuration, formatDurationShort, refreshAccessToken, clearAuthAndRedirect };

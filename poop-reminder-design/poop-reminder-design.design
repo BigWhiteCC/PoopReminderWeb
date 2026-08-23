@@ -1,0 +1,237 @@
+{
+  "data": [
+    {
+      "id": "page-login",
+      "title": "登录/注册",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782615000000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/login.html",
+        "interactions": [
+          {
+            "domId": "btn-login",
+            "targetPageId": "page-home",
+            "transitionLabel": "登录成功"
+          },
+          {
+            "domId": "btn-register",
+            "targetPageId": "page-home",
+            "transitionLabel": "注册成功"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-home",
+      "title": "首页 - 打卡",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782615001000,
+      "canvasData": {
+        "x": 620,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/home.html",
+        "interactions": [
+          {
+            "domId": "nav-weekly",
+            "targetPageId": "page-weekly",
+            "transitionLabel": "查看周视图"
+          },
+          {
+            "domId": "nav-history",
+            "targetPageId": "page-history",
+            "transitionLabel": "查看历史记录"
+          },
+          {
+            "domId": "nav-settings",
+            "targetPageId": "page-settings",
+            "transitionLabel": "前往设置"
+          },
+          {
+            "domId": "nav-admin",
+            "targetPageId": "page-admin",
+            "hideEdge": true,
+            "transitionLabel": "管理面板"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-weekly",
+      "title": "周视图",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782615002000,
+      "canvasData": {
+        "x": 1240,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/weekly.html",
+        "interactions": [
+          {
+            "domId": "nav-home",
+            "targetPageId": "page-home",
+            "hideEdge": true,
+            "transitionLabel": "返回首页"
+          },
+          {
+            "domId": "nav-history",
+            "targetPageId": "page-history",
+            "transitionLabel": "查看历史记录"
+          },
+          {
+            "domId": "nav-settings",
+            "targetPageId": "page-settings",
+            "transitionLabel": "前往设置"
+          },
+          {
+            "domId": "nav-admin",
+            "targetPageId": "page-admin",
+            "hideEdge": true,
+            "transitionLabel": "管理面板"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-history",
+      "title": "历史记录",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782615003000,
+      "canvasData": {
+        "x": 1240,
+        "y": 542,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/history.html",
+        "interactions": [
+          {
+            "domId": "nav-home",
+            "targetPageId": "page-home",
+            "hideEdge": true,
+            "transitionLabel": "返回首页"
+          },
+          {
+            "domId": "nav-weekly",
+            "targetPageId": "page-weekly",
+            "transitionLabel": "查看周视图"
+          },
+          {
+            "domId": "nav-settings",
+            "targetPageId": "page-settings",
+            "transitionLabel": "前往设置"
+          },
+          {
+            "domId": "nav-admin",
+            "targetPageId": "page-admin",
+            "hideEdge": true,
+            "transitionLabel": "管理面板"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-settings",
+      "title": "设置",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782615004000,
+      "canvasData": {
+        "x": 1240,
+        "y": 1090,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/settings.html",
+        "interactions": [
+          {
+            "domId": "nav-home",
+            "targetPageId": "page-home",
+            "hideEdge": true,
+            "transitionLabel": "返回首页"
+          },
+          {
+            "domId": "nav-weekly",
+            "targetPageId": "page-weekly",
+            "transitionLabel": "查看周视图"
+          },
+          {
+            "domId": "nav-history",
+            "targetPageId": "page-history",
+            "transitionLabel": "查看历史记录"
+          },
+          {
+            "domId": "nav-admin",
+            "targetPageId": "page-admin",
+            "hideEdge": true,
+            "transitionLabel": "管理面板"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-admin",
+      "title": "管理员面板",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782615005000,
+      "canvasData": {
+        "x": 620,
+        "y": 437,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/admin.html",
+        "interactions": [
+          {
+            "domId": "nav-home",
+            "targetPageId": "page-home",
+            "hideEdge": true,
+            "transitionLabel": "返回首页"
+          },
+          {
+            "domId": "nav-weekly",
+            "targetPageId": "page-weekly",
+            "transitionLabel": "查看周视图"
+          },
+          {
+            "domId": "nav-history",
+            "targetPageId": "page-history",
+            "transitionLabel": "查看历史记录"
+          },
+          {
+            "domId": "nav-settings",
+            "targetPageId": "page-settings",
+            "transitionLabel": "前往设置"
+          }
+        ]
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "desktop",
+    "projectName": "拉屎提醒 Web 设计稿",
+    "designLibrary": {
+      "name": "苹果",
+      "id": "dl_builtin_apple",
+      "version": null,
+      "scope": "built-in-global",
+      "path": "/Users/xk/.trae-cn/design_libraries/dl_builtin_apple",
+      "versionSource": "metadata.json"
+    }
+  }
+}

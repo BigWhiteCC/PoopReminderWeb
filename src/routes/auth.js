@@ -4,12 +4,24 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { getDb, addLoginLog } = require('../database');
-const { JWT_SECRET, JWT_EXPIRES_IN, POOP_TYPES } = require('../config');
-const { authenticateToken, validateUsername, validateEmail, validatePassword, handleError, setupRateLimiters } = require('../middleware');
+const { JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN, POOP_TYPES } = require('../config');
+const { authenticateToken, verifyUserToken, validateUsername, validateEmail, validatePassword, handleError, setupRateLimiters } = require('../middleware');
 const { authLimiter } = setupRateLimiters();
 const { extractDeviceInfo } = require('../utils');
 
 const router = express.Router();
+
+// 签发 access token（短期）+ refresh token（长期）
+function signTokens(user) {
+    const payload = { userId: user.id, username: user.username, role: user.role || 'user' };
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const refreshToken = jwt.sign(
+        { ...payload, type: 'refresh' },
+        JWT_SECRET,
+        { expiresIn: JWT_REFRESH_EXPIRES_IN }
+    );
+    return { token, refreshToken };
+}
 
 // -------- 公开接口 --------
 router.get('/poop-types', (req, res) => {
@@ -42,14 +54,10 @@ router.post('/register', authLimiter, (req, res) => {
             'INSERT INTO users (username, email, password, created_at, password_changed_at) VALUES (?, ?, ?, ?, ?)'
         ).run(username.trim(), email.trim(), hashedPassword, now, now);
 
-        const token = jwt.sign(
-            { userId: result.lastInsertRowid, username: username.trim(), role: 'user' },
-            JWT_SECRET,
-            { expiresIn: JWT_EXPIRES_IN }
-        );
+        const { token, refreshToken } = signTokens({ id: result.lastInsertRowid, username: username.trim(), role: 'user' });
 
         res.json({
-            success: true, token,
+            success: true, token, refreshToken,
             user: { id: result.lastInsertRowid, username: username.trim(), email: email.trim(), role: 'user' }
         });
     } catch (err) {
@@ -87,16 +95,12 @@ router.post('/login', authLimiter, (req, res) => {
         }
 
         const role = user.role || 'user';
-        const token = jwt.sign(
-            { userId: user.id, username: user.username, role },
-            JWT_SECRET,
-            { expiresIn: JWT_EXPIRES_IN }
-        );
+        const { token, refreshToken } = signTokens({ id: user.id, username: user.username, role });
 
         addLoginLog(user.id, device, true);
 
         res.json({
-            success: true, token,
+            success: true, token, refreshToken,
             user: { id: user.id, username: user.username, email: user.email, role }
         });
     } catch (err) {
@@ -139,6 +143,31 @@ router.post('/user/password', authenticateToken, (req, res) => {
         const e = handleError(err, 'changePassword');
         res.status(e.status).json({ error: e.message });
     }
+});
+
+// -------- 刷新 access token（用 refresh token 换取新的 access token） --------
+router.post('/refresh', (req, res) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(400).json({ error: '缺少 refreshToken' });
+
+    verifyUserToken(refreshToken, (err, payload) => {
+        if (err) {
+            const msg = err.message || '';
+            // refresh token 过期/无效/密码已变更 → 要求重新登录
+            return res.status(401).json({ error: 'Refresh token 无效或已过期，请重新登录' });
+        }
+        // 防止用 access token 冒充 refresh token
+        if (payload.type !== 'refresh') {
+            return res.status(401).json({ error: '无效的 refresh token' });
+        }
+        // 签发新的 access token（不轮换 refresh token，简化实现）
+        const token = jwt.sign(
+            { userId: payload.userId, username: payload.username, role: payload.role },
+            JWT_SECRET,
+            { expiresIn: JWT_EXPIRES_IN }
+        );
+        res.json({ success: true, token });
+    });
 });
 
 module.exports = router;

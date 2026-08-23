@@ -157,6 +157,7 @@ const handleSubmit = async () => {
     }
 
     localStorage.setItem('token', result.token)
+    if (result.refreshToken) localStorage.setItem('refreshToken', result.refreshToken)
     localStorage.setItem('user', JSON.stringify(result.user))
 
     window.location.href = '/'

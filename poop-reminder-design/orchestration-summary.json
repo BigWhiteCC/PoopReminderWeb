@@ -1,0 +1,89 @@
+{
+  "project": {
+    "designProjectPath": "/Users/xk/Documents/Code/Daily/PoopReminderWeb/poop-reminder-design",
+    "deviceType": "desktop",
+    "language": "zh-CN",
+    "businessTheme": "健康追踪工具 - 排便记录与提醒",
+    "designDials": {
+      "layoutVariance": 3,
+      "motionIntensity": 1,
+      "visualDensity": 3
+    },
+    "designRead": "health-app / general-consumer / friendly-functional / medium / no-visual-risk",
+    "sharedProjectShellContract": {
+      "navigation": "顶部导航栏，左侧品牌名「拉屎提醒」，右侧导航链接，深色背景与白色文字",
+      "colorSystem": "Apple Design Library tokens — primary blue #007AFF, backgrounds #f2f2f7/#ffffff, text #1d1d1f/#6e6e73",
+      "typographySystem": "DM Sans primary, 14-16px body, 600 weight headlines, clean readable hierarchy",
+      "radiusScale": "1.2rem global radius, pill-shaped buttons, large card rounding",
+      "shadowModel": "subtle shadow-2xs to shadow-xs for resting, shadow-md for hover/elevated",
+      "surfaceModel": "white cards on light gray background, 1px border for definition"
+    }
+  },
+  "designSource": {
+    "operatingMode": "library-bound",
+    "libraryIdentity": {
+      "name": "苹果",
+      "id": "dl_builtin_apple",
+      "version": null,
+      "scope": "built-in-global",
+      "path": "/Users/xk/.trae-cn/design_libraries/dl_builtin_apple",
+      "versionSource": "metadata.json"
+    }
+  },
+  "pages": [
+    {
+      "nodeId": "page-login",
+      "title": "登录/注册",
+      "htmlSrc": "pages/login.html",
+      "businessScenario": "用户认证入口 - 登录与注册表单",
+      "visualNorthStar": "全屏渐变背景居中登录卡片，Apple 风格简洁表单",
+      "pageIndex": 1
+    },
+    {
+      "nodeId": "page-home",
+      "title": "首页 - 打卡",
+      "htmlSrc": "pages/home.html",
+      "businessScenario": "核心打卡功能 - 连续打卡天数、开始/停止排便计时、大便类型选择、最近记录列表",
+      "visualNorthStar": "打卡英雄区域 + 功能操作区 + 记录列表，信息密度适中",
+      "pageIndex": 2
+    },
+    {
+      "nodeId": "page-weekly",
+      "title": "周视图",
+      "htmlSrc": "pages/weekly.html",
+      "businessScenario": "周数据统计 - 柱状图展示每日次数、本周汇总统计、详细记录列表",
+      "visualNorthStar": "周导航 + 统计卡片 + 柱状图 + 记录列表，数据可视化清晰",
+      "pageIndex": 3
+    },
+    {
+      "nodeId": "page-history",
+      "title": "历史记录",
+      "htmlSrc": "pages/history.html",
+      "businessScenario": "全部记录查询 - 日期/类型筛选、概览统计、导出功能",
+      "visualNorthStar": "筛选栏 + 统计概览 + 记录列表，信息密度适中",
+      "pageIndex": 4
+    },
+    {
+      "nodeId": "page-settings",
+      "title": "设置",
+      "htmlSrc": "pages/settings.html",
+      "businessScenario": "提醒时间设置与密码修改",
+      "visualNorthStar": "表单卡片式布局，简洁功能设置",
+      "pageIndex": 5
+    },
+    {
+      "nodeId": "page-admin",
+      "title": "管理员面板",
+      "htmlSrc": "pages/admin.html",
+      "businessScenario": "后台管理 - 用户管理、记录管理、登录日志、审计日志",
+      "visualNorthStar": "仪表板布局 - 统计卡片 + 标签页 + 数据表格",
+      "pageIndex": 6
+    }
+  ],
+  "componentPlan": [
+    { "slug": "button", "reason": "所有页面的操作按钮" },
+    { "slug": "card", "reason": "打卡卡片、统计卡片、设置卡片" },
+    { "slug": "input", "reason": "登录表单、筛选器、设置表单" },
+    { "slug": "navigation", "reason": "顶部导航栏" }
+  ]
+}

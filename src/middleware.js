@@ -57,30 +57,44 @@ function setupRateLimiters() {
 }
 
 // -------- 认证中间件 --------
+// 通用 token 验证：校验签名 + 密码变更时间（改密后旧 token 立即失效）
+// 供 access token（authenticateToken）与 refresh token（/refresh 接口）复用
+function verifyUserToken(token, cb) {
+    jwt.verify(token, JWT_SECRET, (err, payload) => {
+        if (err) return cb(err, null);
+        try {
+            const db = getDb();
+            const row = db.prepare('SELECT password_changed_at FROM users WHERE id = ?').get(payload.userId);
+            if (!row) return cb(new Error('User not found'), null);
+            if (row.password_changed_at && payload.iat) {
+                const changedAt = new Date(row.password_changed_at).getTime();
+                const issuedAt = payload.iat * 1000;
+                // 加 1 秒容差：JWT iat 是秒级精度，password_changed_at 是毫秒级 ISO 字符串
+                if (issuedAt + 1000 < changedAt) {
+                    return cb(new Error('Token expired due to password change'), null);
+                }
+            }
+            return cb(null, payload);
+        } catch (e) {
+            return cb(e, null);
+        }
+    });
+}
+
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ error: 'Invalid token' });
-
-        try {
-            const db = getDb();
-            const row = db.prepare('SELECT password_changed_at FROM users WHERE id = ?').get(user.userId);
-            if (!row) return res.status(403).json({ error: 'User not found' });
-            if (row.password_changed_at && user.iat) {
-                const changedAt = new Date(row.password_changed_at).getTime();
-                const issuedAt = user.iat * 1000;
-                // 加 1 秒容差：JWT iat 是秒级精度，password_changed_at 是毫秒级 ISO 字符串
-                if (issuedAt + 1000 < changedAt) {
-                    return res.status(403).json({ error: 'Token expired due to password change' });
-                }
+    verifyUserToken(token, (err, user) => {
+        if (err) {
+            // 密码变更或用户不存在 → 403 让前端尝试刷新；token 过期 → 401
+            const msg = err.message || '';
+            if (msg.includes('jwt expired') || msg.includes('jwt malformed')) {
+                return res.status(401).json({ error: 'Token expired' });
             }
-        } catch (e) {
-            return res.status(500).json({ error: 'Authentication failed' });
+            return res.status(403).json({ error: 'Invalid token' });
         }
-
         req.user = user;
         next();
     });
@@ -149,6 +163,7 @@ module.exports = {
     securityHeaders,
     setupRateLimiters,
     authenticateToken,
+    verifyUserToken,
     requireAdmin,
     validateUsername,
     validateEmail,
