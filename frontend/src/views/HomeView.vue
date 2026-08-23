@@ -14,23 +14,25 @@
     <div class="record-section">
       <h3 v-if="!isPooping" class="section-title-small">准备好就开始吧</h3>
       <div v-if="isPooping" class="timer-display">
-        <!-- 随机笑话卡片：填充上半部分空白 -->
-        <div v-if="currentJoke" class="joke-card" :class="{ 'joke-loading': jokeLoading }">
-          <div class="joke-header">
-            <span class="joke-emoji">🤣</span>
-            <span class="joke-title">拉屎看笑话 · 时间过得快</span>
-            <button class="joke-refresh" type="button" @click="loadJoke" :disabled="jokeLoading" aria-label="换一个笑话">
-              {{ jokeLoading ? '加载中…' : '换一个' }}
-            </button>
-          </div>
-          <div class="joke-content">{{ currentJoke }}</div>
-        </div>
-        <div v-else class="joke-card joke-loading">
-          <div class="joke-skeleton"></div>
-          <div class="joke-skeleton short"></div>
+        <!-- 随机笑话：无框融合背景，点击可刷新 -->
+        <button
+          v-if="currentJoke"
+          type="button"
+          class="joke-line"
+          :class="{ 'joke-loading': jokeLoading }"
+          @click="loadJoke"
+          :disabled="jokeLoading"
+          aria-label="点击刷新笑话"
+        >
+          <span class="joke-line-text">{{ currentJoke }}</span>
+        </button>
+        <div v-else class="joke-line joke-loading" aria-hidden="true">
+          <span class="joke-line-text">
+            <span class="joke-skeleton"></span>
+            <span class="joke-skeleton short"></span>
+          </span>
         </div>
 
-        <div class="timer-icon">💩</div>
         <div class="timer-value">{{ formattedElapsed }}</div>
         <div class="timer-label">正在拉屎中...</div>
       </div>
@@ -191,6 +193,8 @@ let ticker = null
 // 随机笑话：屎图标上方填充内容
 const currentJoke = ref('')
 const jokeLoading = ref(false)
+// 防并发：上一次 loadJoke 的 Promise；重复调用复用同一次请求，避免出现"刷两次"
+let jokeInFlightPromise = null
 
 // 本地备用笑话库（联网失败时使用，保证任何情况都能看到笑话）
 const LOCAL_JOKES = [
@@ -283,31 +287,45 @@ async function fetchRemoteJoke() {
   throw new Error('all joke endpoints failed')
 }
 
-function getLocalJoke() {
-  const idx = Math.floor(Math.random() * LOCAL_JOKES.length)
-  return LOCAL_JOKES[idx]
+function getLocalJoke(avoidText = '') {
+  // 避免连续两次抽到同一条（尤其切换时）
+  if (LOCAL_JOKES.length === 1) return LOCAL_JOKES[0]
+  let pick = LOCAL_JOKES[Math.floor(Math.random() * LOCAL_JOKES.length)]
+  let guard = 0
+  while (avoidText && pick === avoidText && guard < 8) {
+    pick = LOCAL_JOKES[Math.floor(Math.random() * LOCAL_JOKES.length)]
+    guard++
+  }
+  return pick
 }
 
-async function loadJoke({ forceRemote = false } = {}) {
+async function loadJoke() {
+  // 用户点击刷新：整次只写入一次文案，杜绝"先本地→再网络"闪两条。
+  // 等待期间保留旧笑话（配合 joke-loading 半透明提示），拿到结果后一次性替换：
+  //   网络成功 → 用网络笑话；失败/超时(4s) → 用本地随机（避开当前这条）。
+  if (jokeInFlightPromise) return jokeInFlightPromise
+
   jokeLoading.value = true
-  try {
-    // 如果不强制走网络，先给一个本地笑话（秒开，避免闪烁），
-    // 之后在后台异步替换成网络笑话。
-    let hasLocal = false
-    if (!forceRemote) {
-      currentJoke.value = getLocalJoke()
-      hasLocal = true
-    }
+  jokeInFlightPromise = (async () => {
     try {
-      const remote = await fetchRemoteJoke()
-      if (remote) currentJoke.value = remote
-    } catch (_) {
-      // 网络失败：如果之前没塞本地笑话，这里补一次
-      if (!hasLocal) currentJoke.value = getLocalJoke()
+      let text = ''
+      try {
+        text = (await Promise.race([
+          fetchRemoteJoke(),
+          new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 4000))
+        ])) || ''
+      } catch (_) {
+        text = ''
+      }
+      // 唯一一次写入
+      currentJoke.value = text || getLocalJoke(currentJoke.value)
+    } finally {
+      jokeLoading.value = false
+      jokeInFlightPromise = null
     }
-  } finally {
-    jokeLoading.value = false
-  }
+  })()
+
+  return jokeInFlightPromise
 }
 
 // 补充记录：日期/时刻上限为“此刻”，按浏览器 datetime-local 要求的 YYYY-MM-DDTHH:mm 格式。
@@ -357,7 +375,8 @@ function restoreSession() {
     if (data.selectedPoopType) selectedPoopType.value = data.selectedPoopType
     elapsedSeconds.value = Math.floor(elapsed)
     startTicker(true)
-    loadJoke() // 恢复会话后也要刷新笑话（页面刷新后的新内容）
+    // 恢复会话（页面刷新后）：默认展示一条本地笑话，不自动联网刷新
+    if (!currentJoke.value) currentJoke.value = getLocalJoke()
     return true
   } catch (e) {
     clearSession()
@@ -445,7 +464,8 @@ async function handleMainButton() {
   if (!isPooping.value) {
     isPooping.value = true
     startTicker()
-    loadJoke() // 每次点击"开始拉屎"都刷新笑话
+    // 开始拉屎：默认展示一条本地笑话（秒出、仅此一条），用户点击笑话区域再联网换
+    currentJoke.value = getLocalJoke(currentJoke.value)
     return
   }
   if (!selectedPoopType.value) {
@@ -622,79 +642,54 @@ onBeforeUnmount(() => {
 .timer-display {
   text-align: center; padding: 1rem 0 1.25rem 0;
 }
-/* 笑话卡片：填充倒计时上方空白 */
-.joke-card {
-  position: relative;
-  background: linear-gradient(135deg, #fff8e6 0%, #fff1d6 100%);
-  border: 1.5px solid #ffd98a;
-  border-radius: var(--radius-lg);
-  padding: 0.9rem 1rem 1rem 1rem;
-  margin: 0 0.25rem 1rem 0.25rem;
-  text-align: left;
-  box-shadow: 0 4px 14px rgba(255, 170, 70, 0.15);
-  animation: jokeIn 0.35s ease;
-}
-@keyframes jokeIn {
-  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-.joke-header {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.55rem;
-}
-.joke-emoji {
-  font-size: 1.15rem;
-  line-height: 1;
-  animation: giggle 1.8s infinite ease-in-out;
-}
-@keyframes giggle {
-  0%, 100% { transform: rotate(0deg) scale(1); }
-  25%      { transform: rotate(-8deg) scale(1.08); }
-  75%      { transform: rotate(8deg) scale(1.08); }
-}
-.joke-title {
-  flex: 1;
-  color: #92480a;
-  font-weight: 700;
-  font-size: 0.85rem;
-  letter-spacing: 0.5px;
-}
-.joke-refresh {
-  appearance: none;
-  border: 1px solid #ffcb6b;
-  background: rgba(255,255,255,0.7);
-  color: #92480a;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
+/* 笑话行：无框、无图标、完全融入背景，点击整行可刷新 */
+.joke-line {
+  display: block;
+  padding: 0.4rem 0.6rem 1rem 0.6rem;
+  margin: 0 auto 0.4rem auto;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  max-width: 90%;
+  box-sizing: border-box;
+  text-align: center;
+  font: inherit;
+  color: inherit;
   cursor: pointer;
-  transition: background-color 0.15s var(--ease-default), transform 0.1s var(--ease-default);
   -webkit-tap-highlight-color: transparent;
+  animation: jokeIn 0.35s ease;
+  transition: background-color 0.18s var(--ease-default);
 }
-.joke-refresh:active:not(:disabled) { transform: scale(0.95); }
-.joke-refresh:disabled { opacity: 0.6; cursor: progress; }
-.joke-refresh:hover:not(:disabled) { background: #fff; }
+.joke-line:hover:not(:disabled) { background: var(--color-surface); }
+.joke-line:active:not(:disabled) { transform: scale(0.995); }
+.joke-line:disabled { cursor: progress; }
+.joke-line.joke-loading { cursor: progress; opacity: 0.55; transition: opacity 0.18s var(--ease-default); }
 
-.joke-content {
-  color: #5d3508;
-  font-size: 0.92rem;
-  line-height: 1.6;
+@keyframes jokeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.joke-line-text {
+  color: var(--color-text-2);
+  font-size: 0.98rem;
+  line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
   min-height: 2.4em;
+  display: inline-block;
+  text-align: left;       /* 多行时每行左对齐，但整体在居中容器里（块内居中） */
+  max-width: 100%;
 }
 
 /* 骨架屏：笑话未加载完时的占位 */
 .joke-skeleton {
+  display: block;
   width: 100%;
-  height: 0.85rem;
-  background: linear-gradient(90deg, #ffe8b8 0%, #fff2d1 50%, #ffe8b8 100%);
+  height: 0.9rem;
+  background: linear-gradient(90deg, var(--color-surface) 0%, var(--color-border) 50%, var(--color-surface) 100%);
   background-size: 200% 100%;
   border-radius: 6px;
-  margin: 0.5rem 0;
+  margin: 0.35rem 0;
   animation: skeletonShimmer 1.4s linear infinite;
 }
 .joke-skeleton.short { width: 60%; }
@@ -703,7 +698,6 @@ onBeforeUnmount(() => {
   to   { background-position: -200% 0; }
 }
 
-.timer-icon { font-size: 3rem; margin-bottom: 0.5rem; animation: pulse 1.2s infinite; }
 .timer-value { font-size: 2.5rem; font-weight: 800; color: var(--color-primary); letter-spacing: 2px; }
 .timer-label { font-size: 0.9rem; color: var(--color-text-3); margin-top: 0.25rem; }
 
@@ -1004,24 +998,8 @@ onBeforeUnmount(() => {
     background: var(--color-surface-2);
     box-shadow: 0 4px 20px rgba(0,0,0,0.3);
   }
-  /* 笑话卡片：深色模式 */
-  .joke-card {
-    background: linear-gradient(135deg, #3a2a16 0%, #4a3520 100%);
-    border-color: #8a5a2a;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  }
-  .joke-title { color: #ffd59e; }
-  .joke-content { color: #f3e0bf; }
-  .joke-refresh {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: #8a5a2a;
-    color: #ffd59e;
-  }
-  .joke-refresh:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
-  .joke-skeleton {
-    background: linear-gradient(90deg, #4a3520 0%, #5d4528 50%, #4a3520 100%);
-    background-size: 200% 100%;
-  }
+  /* 笑话行：深色模式下 hover 背景略加深 */
+  .joke-line:hover:not(:disabled) { background: var(--color-surface-3, rgba(255,255,255,0.05)); }
   .timer-value { color: var(--color-primary); }
   .timer-label { color: var(--color-text-2); }
   .poop-type-item { background: var(--color-surface); color: var(--color-text); }
