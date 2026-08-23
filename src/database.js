@@ -9,7 +9,7 @@ let db;
 
 function getDb() {
     if (!db) {
-        db = new Database('poopreminder.db');
+        db = new Database(process.env.DB_PATH || 'poopreminder.db');
         db.pragma('journal_mode = WAL');
     }
     return db;

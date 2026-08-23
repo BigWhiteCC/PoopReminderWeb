@@ -37,7 +37,9 @@ router.get('/records', authenticateToken, requireAdmin, (req, res) => {
         const params = [];
         if (user_id) { conds.push('r.user_id = ?'); params.push(user_id); }
         if (start) { conds.push('r.date >= ?'); params.push(start); }
-        if (end) { conds.push('r.date <= ?'); params.push(end); }
+        // r.date 是完整 ISO 时间串（如 2026-08-23T13:00:00.000Z），
+        // 直接 <= 'YYYY-MM-DD' 会漏掉结束日当天的全部记录，因此用 < 次日零点
+        if (end) { conds.push("r.date < date(?, '+1 day')"); params.push(end); }
         if (poop_type) { conds.push('r.poop_type = ?'); params.push(poop_type); }
 
         const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
