@@ -1004,6 +1004,24 @@ onBeforeUnmount(() => {
     background: var(--color-surface-2);
     box-shadow: 0 4px 20px rgba(0,0,0,0.3);
   }
+  /* 笑话卡片：深色模式 */
+  .joke-card {
+    background: linear-gradient(135deg, #3a2a16 0%, #4a3520 100%);
+    border-color: #8a5a2a;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  }
+  .joke-title { color: #ffd59e; }
+  .joke-content { color: #f3e0bf; }
+  .joke-refresh {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: #8a5a2a;
+    color: #ffd59e;
+  }
+  .joke-refresh:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
+  .joke-skeleton {
+    background: linear-gradient(90deg, #4a3520 0%, #5d4528 50%, #4a3520 100%);
+    background-size: 200% 100%;
+  }
   .timer-value { color: var(--color-primary); }
   .timer-label { color: var(--color-text-2); }
   .poop-type-item { background: var(--color-surface); color: var(--color-text); }
