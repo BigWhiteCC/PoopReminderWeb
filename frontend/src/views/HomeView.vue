@@ -196,6 +196,9 @@ const jokeLoading = ref(false)
 // 防并发：上一次 loadJoke 的 Promise；重复调用复用同一次请求，避免出现"刷两次"
 let jokeInFlightPromise = null
 
+// 记录最近展示过的笑话，避免短期重复
+const recentJokeQueue = []
+
 // 本地备用笑话库（联网失败时使用，保证任何情况都能看到笑话）
 const LOCAL_JOKES = [
   '为什么程序员总喜欢黑暗模式？因为光吸引 bug。',
@@ -223,79 +226,93 @@ const LOCAL_JOKES = [
   '有朋友问我如何在一年内攒够 10 万？我答：很简单，先存 20 万，然后花一半。',
   '每次看到别人发朋友圈：今天又瘦了 2 斤。我就知道，她刚刚把屎拉完了。',
   '我妈说我一无是处，我立刻回嘴：不对，我至少还会“事后诸葛亮”。',
-  '有一天我说我要早起，结果我的闹钟同意了，我的身体拒绝了，我的灵魂在旁边嗑瓜子。'
+  '有一天我说我要早起，结果我的闹钟同意了，我的身体拒绝了，我的灵魂在旁边嗑瓜子。',
+  // --- 程序员/科技类 ---
+  '程序员最讨厌的数字是什么？0，因为它代表 null、false 和空钱包。',
+  '为什么程序员总分不清万圣节和圣诞节？因为 Oct 31 = Dec 25（八进制31=十进制25）。',
+  '一个SQL语句走进一家酒吧，对两张桌子说：我能加入你们吗？',
+  '世界上最遥远的距离不是生与死，而是需求在甲方脑子里，代码在我脑子里。',
+  '产品经理：这个需求很简单，就改一个字。程序员：好的，改一个字需要改三个表、五个接口、两个定时任务和一个数据库迁移。',
+  '程序员的三大错觉：这代码没问题、这个 bug 不是我写的、这个需求不会改。',
+  '调试代码就像当侦探：你是侦探、是凶手、也是受害者。',
+  '一个 bug 走进酒吧，bartender 说：我们这里不接待未定义的行为。',
+  '为什么 CSS 开发者总是在雨天请假？因为他们只处理 float 和 clear。',
+  '前端说：这个兼容 IE 吗？后端说：IE 是什么？前端说：你真幸福。',
+  // --- 职场/打工人 ---
+  '上班的意义是什么？就是用赚来的钱去看病，因为上班把自己搞出了病。',
+  '有人说钱买不到快乐，那是因为你没试过上班请病假。',
+  '老板问我：你对公司有什么建议？我说：建议公司给我涨工资，这样我就能买更多公司的产品了。',
+  '公司团建就是：把一群不想在一起的人，放到一个不想去的地方，做不想做的事。',
+  '打工人的快乐：周五下午六点。打工人的痛苦：周日晚上的倒计时。',
+  '今天老板说"你做事要主动一点"，于是我主动地——把辞职信写好了。',
+  '我每天的工作就是和电脑斗智斗勇，目前比分：电脑 99999，我 1（那次还是它死机了）。',
+  // --- 生活/冷笑话 ---
+  '有人说我走路像企鹅。我笑了，企鹅可没有啤酒肚。',
+  '我问朋友：你觉得我这个人怎么样？他说：你人不坏，就是有点多余。',
+  '小时候觉得长大了就没人管我了，长大后才明白：不仅没人管，也没人要。',
+  '为什么企鹅的肚子是白色的？因为它们手太短，洗澡只能搓到肚子。',
+  '你知道世界上最长的词是什么吗？"等一下"——因为它永远不会结束。',
+  // --- 拉屎/厕所专属 ---
+  '拉屎蹲久了站起来头晕？那是因为你的灵魂还没从马桶里回来。',
+  '有人说蹲坑是浪费时间，我说不是——那是我一天中最有"产出"的时刻。',
+  '厕所哲学：不是所有的问题都有答案，但所有的屎都需要被拉出来。',
+  '你以为拉屎是浪费时间？错了，那是你离自己最近的时候——毕竟没人会在你拉屎时打扰你。',
+  '带手机进厕所是人类的进步，因为之前进去只能看洗发水瓶子上的文字。',
+  // --- 夫妻/恋爱 ---
+  '老婆问我："你觉得我胖了吗？" 我说："你在我心里更重要了。" 然后我就去沙发睡了。',
+  '我老公说他每天做饭洗碗，我说你做的饭我还得洗碗，他说：对啊，所以我做了两件事。',
+  '为什么结婚后吵架变多了？因为婚前你说什么她都觉得浪漫，婚后你说什么她都觉得在敷衍。',
+  '老婆买了一堆零食放冰箱，我说你说过要减肥的。她说：这些是给你的。我说：那你呢？她说：我再买一份。',
+  // --- 脑筋急转弯 ---
+  '你知道什么动物最容易摔倒吗？狐狸，因为它很狡猾（脚滑）。',
+  '知道为什么自行车不会自己站着吗？因为它太"两"了（累了）。',
+  '为什么钢铁侠不用微信？因为他已经"铁定"不用了。',
+  '世界上最短的笑话是什么？"我"。',
+  '你知道什么门是打不开的吗？脑门。',
+  '为什么鱼不需要电脑？因为它已经在"网"里了。',
+  '你知道最"持久"的东西是什么吗？抖音的15秒——因为看了一个又一个，就过了一小时。',
+  '为什么乌鸦不上网？因为它已经有"网"了。',
+  // --- 哲理/自嘲 ---
+  '时间就像海绵里的水，挤一挤总是有的。但我的钱包就像海绵里的水，挤一挤发现是干的。',
+  '人生最大的错觉：手机震动了、有人喜欢我、今天一定能早睡、这次一定不冲动消费。',
+  '有人说我是废物，我不服，废物还能回收利用，我呢？只能被回收。',
+  '人生的三大难题：早上吃什么、中午吃什么、晚上吃什么。',
+  '以前觉得"岁月不饶人"是句诗，现在发现它是诊断书。',
+  '人生就像一杯茶，不会苦一辈子，但会苦一阵子——然后你发现茶叶还在杯底堵着。',
+  '别人说"顺其自然"是一种豁达，我说"顺其自然"是一种放弃——因为你已经无力改变了。',
+  '我的人生格言是"既来之则安之"，后来发现这句话最适合的场景是——上厕所。',
+  '有人说生活就是起起落落，但我感觉更多是落落落落落落起。',
+  '世界上最尴尬的事不是认错人，而是你热情地打了个招呼，对方也热情地回应了，然后你们各自都不知道对方是谁。',
+  '有人说"你不努力怎么知道不行"，我试了，确实不行。',
+  '我的拖延症严重到什么程度？严重到我打算明天治。',
+  '有人问我：你为什么总是笑？我说：因为哭了也没人看。'
 ]
 
 /**
- * 从多个公共笑话API中随机取一个；失败则回退到本地库。
- * 网络API的内容是纯文本，便于直接展示。
+ * 通过后端代理获取随机笑话（无 CORS 限制，聚合多个 API 源）。
+ * 失败则抛异常，由 loadJoke 回退到本地笑话库。
  */
 async function fetchRemoteJoke() {
-  const endpoints = [
-    // 笑话集：随机返回一条
-    async () => {
-      const res = await fetch('https://api.apiopen.top/api/getJoke?size=1', { cache: 'no-store' })
-      if (!res.ok) throw new Error('api1 fail')
-      const json = await res.json()
-      const text = json?.result?.[0]?.text || json?.result?.[0]?.content || json?.message
-      if (!text || typeof text !== 'string') throw new Error('api1 empty')
-      return text.trim()
-    },
-    // 小歪API：随机一句话/笑话，需要解析
-    async () => {
-      const res = await fetch('https://api.ixiaowai.cn/twts.php', { cache: 'no-store' })
-      if (!res.ok) throw new Error('api2 fail')
-      const text = await res.text()
-      const clean = (text || '').replace(/<[^>]+>/g, '').trim()
-      if (!clean) throw new Error('api2 empty')
-      return clean
-    },
-    // 韩韩API - 土味/笑话
-    async () => {
-      const res = await fetch('https://api.vvhan.com/api/text/joke?type=text', { cache: 'no-store' })
-      if (!res.ok) throw new Error('api3 fail')
-      const text = await res.text()
-      const clean = (text || '').replace(/<[^>]+>/g, '').trim()
-      if (!clean) throw new Error('api3 empty')
-      return clean
-    },
-    // 一言 Hitokoto 作为备用（不是严格的笑话，但有趣且稳定）
-    async () => {
-      const res = await fetch('https://v1.hitokoto.cn/?c=a&c=d&c=i&c=k&encode=text', { cache: 'no-store' })
-      if (!res.ok) throw new Error('api4 fail')
-      const text = await res.text()
-      const clean = (text || '').trim()
-      if (!clean) throw new Error('api4 empty')
-      return clean
-    }
-  ]
-
-  // 打乱顺序，避免总从同一个API开始
-  const shuffled = [...endpoints].sort(() => Math.random() - 0.5)
-  let lastErr = null
-  for (const fn of shuffled) {
-    try {
-      // 设置 3.5s 超时，避免网络卡顿影响体验
-      const result = await Promise.race([
-        fn(),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3500))
-      ])
-      if (result && result.length >= 4 && result.length <= 400) return result
-    } catch (e) { lastErr = e }
-  }
-  if (lastErr) throw lastErr
-  throw new Error('all joke endpoints failed')
+  const res = await fetch('/api/joke', { cache: 'no-store' })
+  if (!res.ok) throw new Error('joke proxy http ' + res.status)
+  const json = await res.json()
+  if (!json.ok || !json.joke) throw new Error('joke proxy empty')
+  return json.joke
 }
 
 function getLocalJoke(avoidText = '') {
-  // 避免连续两次抽到同一条（尤其切换时）
+  // 从本地笑话库随机取一条，尽量避开最近展示过的（队列长度 = 总库 1/3）
   if (LOCAL_JOKES.length === 1) return LOCAL_JOKES[0]
-  let pick = LOCAL_JOKES[Math.floor(Math.random() * LOCAL_JOKES.length)]
-  let guard = 0
-  while (avoidText && pick === avoidText && guard < 8) {
-    pick = LOCAL_JOKES[Math.floor(Math.random() * LOCAL_JOKES.length)]
-    guard++
-  }
+  const recentLimit = Math.max(10, Math.floor(LOCAL_JOKES.length / 3))
+  const avoidSet = new Set([...recentJokeQueue])
+  if (avoidText) avoidSet.add(avoidText)
+  let candidates = LOCAL_JOKES.filter(j => !avoidSet.has(j))
+  if (candidates.length === 0) candidates = LOCAL_JOKES.filter(j => j !== avoidText)
+  if (candidates.length === 0) candidates = LOCAL_JOKES
+  const pick = candidates[Math.floor(Math.random() * candidates.length)]
+  // 记入最近队列，超限则弹出最早的
+  recentJokeQueue.push(pick)
+  if (recentJokeQueue.length > recentLimit) recentJokeQueue.shift()
   return pick
 }
 

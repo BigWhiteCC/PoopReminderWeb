@@ -52,6 +52,7 @@ app.use('/api', require('./src/routes/auth'));
 app.use('/api/record', require('./src/routes/records'));
 app.use('/api/settings', require('./src/routes/settings'));
 app.use('/api/admin', require('./src/routes/admin'));
+app.use('/api/joke', require('./src/routes/joke'));
 
 // -------- 静态资源与 SPA fallback --------
 const DIST_DIR = path.join(__dirname, 'frontend/dist');
